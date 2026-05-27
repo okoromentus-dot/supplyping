@@ -48,24 +48,73 @@ const INDUSTRIES = [
   { id: "other", emoji: "➕", label: "Others" },
 ];
 
-const SUPPLIES = [
-  { id: "tp", emoji: "🧻", label: "No Toilet Paper", color: T.red, bg: T.redLight, border: T.redBorder },
-  { id: "soap", emoji: "🧼", label: "No Soap", color: T.orange, bg: T.orangeLight, border: T.orangeBorder },
-  { id: "towels", emoji: "🖐️", label: "No Paper Towels", color: T.yellow, bg: T.yellowLight, border: T.yellowBorder },
-  { id: "pads", emoji: "🌸", label: "No Feminine Products", color: "#DB2777", bg: "#FDF2F8", border: "#FBCFE8" },
-  { id: "sanitizer", emoji: "🧴", label: "No Hand Sanitizer", color: T.blue, bg: T.blueLight, border: T.blueBorder },
-  { id: "cleaning", emoji: "🚫", label: "Closed for Cleaning", color: T.purple, bg: T.purpleLight, border: T.purpleBorder },
-  { id: "good", emoji: "✅", label: "All Good — Fully Stocked", color: T.green, bg: T.greenLight, border: T.greenBorder },
+const SUPPLY_CATEGORIES = [
+  {
+    id: "restroom", label: "🚻 Restroom Supplies", color: T.blue, bg: T.blueLight, border: T.blueBorder,
+    items: [
+      { id: "soap", emoji: "🧼", label: "No Soap" },
+      { id: "towels", emoji: "🖐️", label: "No Paper Towels" },
+      { id: "tp", emoji: "🧻", label: "No Toilet Paper" },
+      { id: "pads", emoji: "🌸", label: "No Feminine Products" },
+      { id: "sanitizer", emoji: "🧴", label: "No Hand Sanitizer" },
+      { id: "cleaning", emoji: "🚫", label: "Cleaning Needed" },
+    ]
+  },
+  {
+    id: "breakroom", label: "☕ Breakroom & Kitchen", color: T.orange, bg: T.orangeLight, border: T.orangeBorder,
+    items: [
+      { id: "coffee", emoji: "☕", label: "Coffee Machine Down" },
+      { id: "water", emoji: "💧", label: "Water Dispenser Empty" },
+      { id: "fridge", emoji: "❄️", label: "Fridge Issue" },
+      { id: "utensils", emoji: "🍴", label: "Utensils Needed" },
+    ]
+  },
+  {
+    id: "conference", label: "📽️ Conference & Meeting Rooms", color: T.purple, bg: T.purpleLight, border: T.purpleBorder,
+    items: [
+      { id: "av", emoji: "📽️", label: "AV / Projector Failure" },
+      { id: "cables", emoji: "🔌", label: "Missing Cables" },
+      { id: "whiteboard", emoji: "🖊️", label: "Whiteboard Supplies Needed" },
+    ]
+  },
+  {
+    id: "office", label: "🖨️ Office & Printing Supplies", color: T.yellow, bg: T.yellowLight, border: T.yellowBorder,
+    items: [
+      { id: "paperjam", emoji: "🖨️", label: "Printer Paper Jam" },
+      { id: "toner", emoji: "🖋️", label: "Ink / Toner Low" },
+      { id: "stationery", emoji: "📎", label: "General Stationery Needed" },
+    ]
+  },
+  {
+    id: "safety", label: "⚠️ Safety & Maintenance", color: T.red, bg: T.redLight, border: T.redBorder,
+    items: [
+      { id: "spill", emoji: "⚠️", label: "Spill / Hazard" },
+      { id: "lights", emoji: "💡", label: "Flickering Lights" },
+      { id: "hvac", emoji: "🌡️", label: "HVAC / Temperature Issue" },
+    ]
+  },
 ];
 
-const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum) => {
+const SUPPLIES = SUPPLY_CATEGORIES.flatMap(cat =>
+  cat.items.map(item => ({
+    ...item,
+    category: cat.id,
+    color: cat.color,
+    bg: cat.bg,
+    border: cat.border,
+  }))
+);
+
+const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal) => {
+  const base = "https://supplyping.com/r";
   const params = new URLSearchParams();
-  if (cleaningEmail) params.set("prefill_Cleaning Team Email", cleaningEmail);
-  if (locationName) params.set("prefill_Location", locationName);
-  if (roomName) params.set("prefill_Room", roomName);
-  if (stallNum) params.set("prefill_Stall", `Stall ${stallNum}`);
+  if (cleaningEmail) params.set("ce", cleaningEmail);
+  if (locationName) params.set("l", locationName);
+  if (roomName) params.set("r", roomName);
+  if (stallNum) params.set("s", stallNum);
+  if (bizNameVal) params.set("b", bizNameVal);
   const query = params.toString();
-  return query ? `${AIRTABLE_BASE_FORM}?${query}` : AIRTABLE_BASE_FORM;
+  return query ? `${base}?${query}` : base;
 };
 
 const qr = (url, size = 130) =>
@@ -206,12 +255,21 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname;
-    const isQR = path === "/r" || path.startsWith("/r/") || params.has("b") || params.has("l");
+    const isQR = path === "/r" || path.startsWith("/r/") || params.has("ce") || params.has("l");
+
+    // Pre-fill location from ?location= URL param (works on any page)
+    const locationParam = params.get("location");
+    if (locationParam) {
+      setLocation(locationParam);
+      setQrLocation(locationParam);
+    }
+
     if (isQR) {
       setQrBusiness(params.get("b") || "");
-      setQrLocation(params.get("l") || "");
+      setQrLocation(params.get("l") || locationParam || "");
       setQrRoom(params.get("r") || "");
       setQrStall(params.get("s") || "");
+      setAlertEmail(params.get("ce") || "");
       setScreen("report");
     }
   }, []);
@@ -266,7 +324,7 @@ export default function App() {
           <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>SupplyPing</div>
-            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase", fontFamily: font.body }}>KNOW BEFORE YOU GO</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase", fontFamily: font.body }}>FACILITY OPERATIONS PLATFORM</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -279,16 +337,16 @@ export default function App() {
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "100px 48px 80px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
-          Free 30-Day Pilot — Metro Detroit Facilities
+          Free 30-Day Pilot — Metro Detroit Businesses & Facilities
         </div>
         <h1 style={{ fontFamily: font.display, fontSize: 68, fontWeight: 700, margin: "0 0 24px", letterSpacing: -3, lineHeight: 1.0 }}>
           Know Before<br />You Go <span style={{ color: T.orange }}>🚻</span>
         </h1>
-        <p style={{ fontSize: 19, color: T.muted, maxWidth: 560, margin: "0 auto 16px", lineHeight: 1.7 }}>
-          Real-time bathroom supply alerts for warehouses, hotels, schools, gyms, hospitals, commercial buildings and more.
+        <p style={{ fontSize: 19, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
+          Real-time workplace supply & facility alerts for offices, warehouses, retail, and campuses. From restroom supplies to equipment failures — covered.
         </p>
-        <p style={{ fontSize: 14, color: T.dim, maxWidth: 480, margin: "0 auto 40px", lineHeight: 1.6 }}>
-          Workers scan a QR code → tap what's missing → cleaning team notified instantly. Set up in 10 minutes.
+        <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 40px", lineHeight: 1.6 }}>
+          Workers scan a QR code → tap the issue → the right team is notified instantly. Set up in 10 minutes. No IT team needed.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <Btn label="Start Free Trial — No Credit Card →" onClick={() => nav("signup")} variant="primary" size="lg" />
@@ -296,11 +354,11 @@ export default function App() {
         </div>
         <div style={{ fontSize: 12, color: T.dim }}>✓ No credit card &nbsp;&nbsp; ✓ Setup in 10 min &nbsp;&nbsp; ✓ Cancel anytime</div>
 
-        {/* Supply badges */}
+        {/* Category badges */}
         <div style={{ marginTop: 56, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-          {SUPPLIES.map(s => (
-            <div key={s.id} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 500 }}>
-              {s.emoji} {s.label}
+          {SUPPLY_CATEGORIES.map(cat => (
+            <div key={cat.id} style={{ background: cat.bg, border: `1px solid ${cat.border}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: cat.color }}>
+              {cat.label}
             </div>
           ))}
         </div>
@@ -318,7 +376,7 @@ export default function App() {
               { n: "01", emoji: "✍️", title: "Sign Up Free", desc: "Create your account and select your industry. No credit card needed." },
               { n: "02", emoji: "🚻", title: "Add Bathrooms", desc: "Enter your locations, rooms, and stall counts. We generate everything." },
               { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post inside each stall door." },
-              { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan → tap what's missing → cleaning team notified instantly." },
+              { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan → tap the issue → the right team is notified instantly." },
             ].map(s => (
               <Card key={s.n}>
                 <div style={{ fontSize: 11, color: T.orange, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>{s.n}</div>
@@ -356,7 +414,7 @@ export default function App() {
           <p style={{ color: T.muted, fontSize: 15, marginBottom: 48 }}>Start free for 30 days. No credit card required.</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
             {[
-              { name: "Starter", price: "$49", mo: "/mo", features: ["1 facility", "Up to 10 bathrooms", "Email alerts to cleaning staff", "Live dashboard", "QR code generator"], highlight: false },
+              { name: "Starter", price: "$49", mo: "/mo", features: ["1 facility", "Up to 10 bathrooms", "Email alerts to operations staff", "Live dashboard", "QR code generator"], highlight: false },
               { name: "Business", price: "$149", mo: "/mo", features: ["Up to 5 facilities", "Unlimited bathrooms", "SMS + Email alerts", "Weekly summary report", "Priority support"], highlight: true },
               { name: "Enterprise", price: "Custom", mo: "", features: ["Unlimited facilities", "Door sensor integration", "Custom branding", "API access", "Dedicated support"], highlight: false },
             ].map(p => (
@@ -382,7 +440,7 @@ export default function App() {
       <div style={{ background: "linear-gradient(135deg, #1A1814 0%, #2a2420 100%)", padding: "100px 48px", textAlign: "center" }}>
         <div style={{ fontSize: 11, color: "#555", letterSpacing: 3, textTransform: "uppercase", marginBottom: 20, fontWeight: 600 }}>GET STARTED TODAY</div>
         <h2 style={{ fontFamily: font.display, fontSize: 48, fontWeight: 700, color: T.white, margin: "0 0 16px", letterSpacing: -2 }}>
-          Ready to eliminate<br />supply complaints forever?
+          Ready to streamline<br />your facility operations?
         </h2>
         <p style={{ color: "#888", fontSize: 16, marginBottom: 40, maxWidth: 480, margin: "0 auto 40px", lineHeight: 1.6 }}>
           Free for 30 days. Set up in 10 minutes. No credit card required.
@@ -639,7 +697,7 @@ export default function App() {
           <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>SupplyPing Dashboard</div>
-            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Your Facility"}</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -746,7 +804,7 @@ export default function App() {
           <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Manage Bathrooms</div>
-            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Your Facility"}</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -844,31 +902,89 @@ export default function App() {
           <>
             <div style={{ textAlign: "center", marginBottom: 32 }}>
               <div style={{ width: 56, height: 56, background: T.ink, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 16px" }}>🚻</div>
-              <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Know Before You Go</div>
-              <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>Report a Supply Issue</h2>
-              <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select what needs attention. Takes 10 seconds.</p>
+              <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Facility Operations Platform</div>
+              <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>Report a Facility Issue</h2>
+              <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select the issue category. Takes 10 seconds.</p>
               {(qrRoom || qrLocation) && (
                 <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, display: "inline-block", marginTop: 6 }}>
-                  📍 {[qrRoom, qrLocation, qrStall ? `Stall ${qrStall}` : ""].filter(Boolean).join(" · ")}
+                  📍 {[qrLocation, qrRoom, qrStall ? `Stall ${qrStall}` : ""].filter(Boolean).join(" · ")}
+                </div>
+              )}
+              {!qrLocation && !qrRoom && (
+                <div style={{ marginTop: 12 }}>
+                  <input
+                    placeholder="Enter your location (e.g. Building A, Floor 2)"
+                    value={qrLocation}
+                    onChange={e => setQrLocation(e.target.value)}
+                    style={{ width: "100%", border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.cream, outline: "none", boxSizing: "border-box" }}
+                  />
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-              {SUPPLIES.map(s => {
-                const sel = reportIssue === s.id;
-                return (
-                  <button key={s.id} onClick={() => setReportIssue(s.id)}
-                    style={{ background: sel ? T.ink : T.white, border: `2px solid ${sel ? T.ink : T.border}`, borderRadius: 14, padding: "16px 20px", fontFamily: font.body, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, boxShadow: T.shadow, transition: "all 0.15s" }}>
-                    <span style={{ fontSize: 26 }}>{s.emoji}</span>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: sel ? T.white : T.ink }}>{s.label}</span>
-                    {sel && <span style={{ marginLeft: "auto", fontSize: 16 }}>✓</span>}
-                  </button>
-                );
-              })}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
+              {SUPPLY_CATEGORIES.map(cat => (
+                <div key={cat.id}>
+                  <div style={{ fontSize: 11, color: cat.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, fontFamily: font.body, padding: "4px 0" }}>
+                    {cat.label}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {cat.items.map(s => {
+                      const sel = reportIssue === s.id;
+                      return (
+                        <button key={s.id} onClick={() => setReportIssue(s.id)}
+                          style={{ background: sel ? T.ink : T.white, border: `2px solid ${sel ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: T.shadow, transition: "all 0.15s" }}>
+                          <span style={{ fontSize: 22 }}>{s.emoji}</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: sel ? T.white : T.ink }}>{s.label}</span>
+                          {sel && <span style={{ marginLeft: "auto", fontSize: 16 }}>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-            <Btn label="Send Report →" onClick={() => {
+            <Btn label="Send Report →" onClick={async () => {
               if (!reportIssue) return;
-              window.location.href = AIRTABLE_BASE_FORM;
+              const supply = SUPPLIES.find(s => s.id === reportIssue);
+              const cleaningEmail = alertEmail || new URLSearchParams(window.location.search).get("ce") || "";
+              const locName = qrLocation || new URLSearchParams(window.location.search).get("l") || "Unknown Location";
+              const roomName = qrRoom || new URLSearchParams(window.location.search).get("r") || "Unknown Room";
+              const stallNum = qrStall || new URLSearchParams(window.location.search).get("s") || "1";
+              const biz = qrBusiness || new URLSearchParams(window.location.search).get("b") || "SupplyPing";
+
+              // Submit to Airtable
+              try {
+                await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
+                  method: "POST",
+                  headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ fields: {
+                    "Location": locName,
+                    "Room": roomName,
+                    "Stall": `Stall ${stallNum}`,
+                    "Status": supply?.label || reportIssue,
+                    "Cleaning Team Email": cleaningEmail,
+                    "Reported At": new Date().toISOString(),
+                    "Resolved": false
+                  }})
+                });
+              } catch(e) { console.log("Airtable error:", e); }
+
+              // Send email to client cleaning team via EmailJS
+              if (cleaningEmail) {
+                try {
+                  await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+                    cleaning_email: cleaningEmail,
+                    issue: supply?.label || reportIssue,
+                    location: locName,
+                    room: roomName,
+                    stall: `Stall ${stallNum}`,
+                    business: biz,
+                    time: new Date().toLocaleString(),
+                  }, EMAILJS_PUBLIC_KEY);
+                } catch(e) { console.log("Email error:", e); }
+              }
+
+              setReportDone(true);
             }} disabled={!reportIssue} variant="primary" full size="lg" />
             <div style={{ textAlign: "center", marginTop: 16 }}>
               <span onClick={() => nav("landing")} style={{ fontSize: 12, color: T.muted, cursor: "pointer" }}>← supplyping.com</span>
@@ -897,7 +1013,7 @@ export default function App() {
       <div style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "20px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h2 style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, margin: "0 0 4px" }}>Live Bathroom Status</h2>
-          <p style={{ fontSize: 13, color: T.muted, margin: 0 }}>Know Before You Go 🚻 — Updates automatically</p>
+          <p style={{ fontSize: 13, color: T.muted, margin: 0 }}>SupplyPing Facility Operations — Updates automatically</p>
         </div>
         <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
       </div>
