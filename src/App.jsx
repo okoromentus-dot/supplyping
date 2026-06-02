@@ -230,7 +230,8 @@ export default function App() {
   const [alertEmail, setAlertEmail] = useState("");
   const [alertPhone, setAlertPhone] = useState("");
   const [testSent, setTestSent] = useState(false);
-  const [reportIssue, setReportIssue] = useState(null);
+  const [reportIssues, setReportIssues] = useState([]);
+  const [otherText, setOtherText] = useState("");
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
@@ -943,6 +944,9 @@ export default function App() {
                 </div>
               )}
             </div>
+            <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, textAlign: "center", marginBottom: 16 }}>
+              ✓ Select one or more issues, then tap Send
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
               {SUPPLY_CATEGORIES.map(cat => (
                 <div key={cat.id}>
@@ -951,23 +955,45 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {cat.items.map(s => {
-                      const sel = reportIssue === s.id;
+                      const sel = reportIssues.includes(s.id);
                       return (
-                        <button key={s.id} onClick={() => setReportIssue(s.id)}
+                        <button key={s.id} onClick={() => setReportIssues(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])}
                           style={{ background: sel ? T.ink : T.white, border: `2px solid ${sel ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: T.shadow, transition: "all 0.15s" }}>
+                          <span style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${sel ? T.white : T.dim}`, background: sel ? T.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, color: T.white }}>{sel ? "✓" : ""}</span>
                           <span style={{ fontSize: 22 }}>{s.emoji}</span>
                           <span style={{ fontSize: 14, fontWeight: 600, color: sel ? T.white : T.ink }}>{s.label}</span>
-                          {sel && <span style={{ marginLeft: "auto", fontSize: 16 }}>✓</span>}
                         </button>
                       );
                     })}
                   </div>
                 </div>
               ))}
+
+              {/* OTHER — custom issue */}
+              <div>
+                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, fontFamily: font.body, padding: "4px 0" }}>
+                  ✏️ Other / Custom Issue
+                </div>
+                <input
+                  value={otherText}
+                  onChange={e => setOtherText(e.target.value)}
+                  placeholder="Describe any other issue here..."
+                  style={{ width: "100%", border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }}
+                />
+              </div>
             </div>
+
+            {(reportIssues.length > 0 || otherText.trim()) && (
+              <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: T.green, fontWeight: 500, marginBottom: 14 }}>
+                {reportIssues.length + (otherText.trim() ? 1 : 0)} issue{(reportIssues.length + (otherText.trim() ? 1 : 0)) > 1 ? "s" : ""} selected
+              </div>
+            )}
+
             <Btn label="Send Report →" onClick={async () => {
-              if (!reportIssue) return;
-              const supply = SUPPLIES.find(s => s.id === reportIssue);
+              const selectedLabels = reportIssues.map(id => SUPPLIES.find(s => s.id === id)?.label).filter(Boolean);
+              if (otherText.trim()) selectedLabels.push(`Other: ${otherText.trim()}`);
+              if (selectedLabels.length === 0) return;
+              const issueString = selectedLabels.join(", ");
               const cleaningEmail = alertEmail || new URLSearchParams(window.location.search).get("ce") || "";
               const locName = qrLocation || new URLSearchParams(window.location.search).get("l") || "Unknown Location";
               const roomName = qrRoom || new URLSearchParams(window.location.search).get("r") || "Unknown Room";
@@ -983,7 +1009,7 @@ export default function App() {
                     "Location": locName,
                     "Room": roomName,
                     "Stall": `Stall ${stallNum}`,
-                    "Status": supply?.label || reportIssue,
+                    "Status": issueString,
                     "Cleaning Team Email": cleaningEmail,
                     "Reported At": new Date().toISOString(),
                     "Resolved": false
@@ -991,12 +1017,12 @@ export default function App() {
                 });
               } catch(e) { console.log("Airtable error:", e); }
 
-              // Send email to client cleaning team via EmailJS
+              // Send email to client team via EmailJS
               if (cleaningEmail) {
                 try {
                   await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
                     cleaning_email: cleaningEmail,
-                    issue: supply?.label || reportIssue,
+                    issue: issueString,
                     location: locName,
                     room: roomName,
                     stall: `Stall ${stallNum}`,
@@ -1007,7 +1033,7 @@ export default function App() {
               }
 
               setReportDone(true);
-            }} disabled={!reportIssue} variant="primary" full size="lg" />
+            }} disabled={reportIssues.length === 0 && !otherText.trim()} variant="primary" full size="lg" />
             <div style={{ textAlign: "center", marginTop: 16 }}>
               <span onClick={() => nav("landing")} style={{ fontSize: 12, color: T.muted, cursor: "pointer" }}>← supplyping.com</span>
             </div>
@@ -1018,7 +1044,7 @@ export default function App() {
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>Report Sent!</h2>
             <p style={{ color: T.muted, fontSize: 15 }}>The cleaning team has been notified and is on their way.</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Btn label="Report Another Issue" onClick={() => { setReportIssue(null); setReportDone(false); }} variant="outline" />
+              <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
             </div>
           </div>
