@@ -233,6 +233,7 @@ export default function App() {
   const [rooms, setRooms] = useState([{ name: "Men's Room", stalls: 2 }, { name: "Women's Room", stalls: 2 }]);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertPhone, setAlertPhone] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const [testSent, setTestSent] = useState(false);
   const [reportIssues, setReportIssues] = useState([]);
   const [otherText, setOtherText] = useState("");
@@ -476,7 +477,7 @@ export default function App() {
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="orange" size="lg" />
-          <a href="mailto:hello@supplyping.com?subject=Free Pilot Request" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
+          <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hello@supplyping.com&su=SupplyPing%20Inquiry" target="_blank" rel="noreferrer" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
             Email Us →
           </a>
         </div>
@@ -484,6 +485,18 @@ export default function App() {
           {[{ icon: "📧", text: "hello@supplyping.com" }, { icon: "📞", text: "313-591-3484" }, { icon: "🌐", text: "supplyping.com" }, { icon: "📍", text: "Metro Detroit, MI" }].map(t => (
             <span key={t.text} style={{ display: "flex", alignItems: "center", gap: 6 }}>{t.icon} {t.text}</span>
           ))}
+        </div>
+        <div id="sms-terms" style={{ maxWidth: 720, margin: "32px auto 0", paddingTop: 24, borderTop: "1px solid #1c1c1c", fontSize: 11, color: "#555", lineHeight: 1.7, textAlign: "left" }}>
+          <div style={{ fontWeight: 700, color: "#777", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>SMS Alerts — Terms &amp; Consent</div>
+          <p style={{ margin: "0 0 8px" }}>
+            SupplyPing sends SMS text alerts to facility operators and cleaning teams who opt in during account setup. By providing a mobile number and checking the consent box, you agree to receive recurring facility-alert text messages from SupplyPing. Message frequency varies based on facility activity. Message and data rates may apply.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at hello@supplyping.com or 313-591-3484. Consent to receive SMS is not a condition of purchase.
+          </p>
+          <p style={{ margin: 0 }}>
+            We do not sell or share mobile information with third parties for marketing. See our Privacy Policy and Terms of Service for details. © 2026 SupplyPing, Metro Detroit, MI.
+          </p>
         </div>
       </div>
     </div>
@@ -650,6 +663,15 @@ export default function App() {
             <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>Enter your cleaning team's contact info. They'll be notified instantly when a supply issue is reported.</p>
             <Input label="Cleaning Team Email" value={alertEmail} onChange={setAlertEmail} placeholder="cleaning@yourbusiness.com" type="email" />
             <Input label="Cleaning Team Phone (for SMS)" value={alertPhone} onChange={setAlertPhone} placeholder="+1 313 000 0000" />
+            <div style={{ background: T.cream, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="checkbox" checked={smsConsent} onChange={e => setSmsConsent(e.target.checked)}
+                  style={{ marginTop: 3, width: 18, height: 18, accentColor: T.green, flexShrink: 0, cursor: "pointer" }} />
+                <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, fontFamily: font.body }}>
+                  By providing a phone number and checking this box, you agree to receive SMS text alerts from SupplyPing about facility supply issues at this number. Message frequency varies. Message &amp; data rates may apply. Reply <b>STOP</b> to unsubscribe or <b>HELP</b> for help. Consent is not a condition of purchase.
+                </span>
+              </label>
+            </div>
             <div style={{ marginBottom: 20 }}>
               <Btn label={testSent ? "✅ Test Sent!" : "📤 Send Test Alert"} onClick={sendTestAlert} disabled={!alertEmail || testSent} variant="outline" size="sm" />
               {testSent && <span style={{ marginLeft: 10, fontSize: 13, color: T.green }}>Check {alertEmail} for the test alert!</span>}
