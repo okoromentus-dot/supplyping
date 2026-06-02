@@ -10,6 +10,70 @@ const MANAGEMENT_EMAIL = "hello@supplyping.com";
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e) {}
 
+// ── OFFLINE-FIRST REPORT QUEUE ──
+// Restrooms & supply rooms are signal dead zones. If a worker submits a report
+// while offline, we stash the EmailJS template params in localStorage and flush
+// them automatically the moment connectivity returns.
+const QUEUE_KEY = "supplyping_offline_queue";
+
+function readQueue() {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writeQueue(queue) {
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  } catch (e) {}
+}
+
+function queueReport(templateParams) {
+  const queue = readQueue();
+  queue.push({ params: templateParams, savedAt: Date.now() });
+  writeQueue(queue);
+}
+
+// Sends an alert if online; queues it to localStorage if offline.
+// Returns: "sent" | "queued" | "failed"
+async function sendOrQueueAlert(templateParams) {
+  // navigator.onLine === false is a reliable "definitely offline" signal
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    queueReport(templateParams);
+    return "queued";
+  }
+  try {
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, templateParams);
+    return "sent";
+  } catch (e) {
+    // The send failed even though the browser believed it was online
+    // (captive portal, weak signal, timeout). Queue it so it isn't lost.
+    queueReport(templateParams);
+    return "queued";
+  }
+}
+
+// Flush every queued report back to EmailJS. Re-queues any that still fail.
+async function flushQueue() {
+  const queue = readQueue();
+  if (queue.length === 0) return 0;
+  const remaining = [];
+  let flushed = 0;
+  for (const entry of queue) {
+    try {
+      await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, entry.params);
+      flushed++;
+    } catch (e) {
+      remaining.push(entry); // keep it for the next attempt
+    }
+  }
+  writeQueue(remaining);
+  return flushed;
+}
+
 const AIRTABLE_TOKEN = "patkVT1Wc5FP40iAq.f98ab9293b37172e41e3d7a1ce3b58ce2ebcdc1b2b55aeff15a5b47198194d77";
 const AIRTABLE_BASE = "appOkUWfKR5sb2Br4";
 const AIRTABLE_BASE_FORM = "https://airtable.com/appOkUWfKR5sb2Br4/shr6E9eQcAhQ5I7En";
@@ -279,6 +343,24 @@ export default function App() {
     }, 30000);
     return () => clearInterval(interval);
   }, [screen]);
+
+  // ── OFFLINE QUEUE SYNC ──
+  // When connectivity returns, automatically flush any reports that were
+  // submitted while offline. Also attempt a flush on first load in case the
+  // app reopened online with items still queued from a previous session.
+  useEffect(() => {
+    const syncQueue = async () => {
+      const flushed = await flushQueue();
+      if (flushed > 0) {
+        showToast(`📡 Back online — ${flushed} queued report${flushed > 1 ? "s" : ""} sent!`, T.green);
+      }
+    };
+    // Try once on mount (covers "reopened online with a backlog")
+    syncQueue();
+    // And every time the browser regains connectivity
+    window.addEventListener("online", syncQueue);
+    return () => window.removeEventListener("online", syncQueue);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1051,29 +1133,24 @@ export default function App() {
               recipients.push(MANAGEMENT_EMAIL);
               const toField = recipients.join(", ");
 
-              // Send email alert via EmailJS to cleaning team AND management
-              let emailOk = false;
-              try {
-                await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-                  cleaning_email: toField,
-                  to_email: toField,
-                  email: toField,
-                  issue: issueString,
-                  location: locName,
-                  room: roomName,
-                  stall: `Stall ${stallNum}`,
-                  business: biz,
-                  time: new Date().toLocaleString(),
-                });
-                emailOk = true;
-              } catch(e) {
-                console.log("Email error:", e);
-              }
+              // Send email alert — or queue it offline for auto-sync later.
+              // Matches template variables: cleaning_email, to_email, email
+              const result = await sendOrQueueAlert({
+                cleaning_email: toField,
+                to_email: toField,
+                email: toField,
+                issue: issueString,
+                location: locName,
+                room: roomName,
+                stall: `Stall ${stallNum}`,
+                business: biz,
+                time: new Date().toLocaleString(),
+              });
 
-              if (emailOk) {
+              if (result === "sent") {
                 showToast("✅ Report sent! Team notified.", T.green);
-              } else {
-                showToast("⚠️ Report saved. Email alert may be delayed.", T.yellow);
+              } else if (result === "queued") {
+                showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
               }
               setReportDone(true);
             }} disabled={reportIssues.length === 0 && !otherText.trim()} variant="primary" full size="lg" />
