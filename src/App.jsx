@@ -5,6 +5,10 @@ import emailjs from "@emailjs/browser";
 const EMAILJS_SERVICE = "service_9f62cg2";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
 const EMAILJS_PUBLIC_KEY = "WZ68pLc75xuy8hcHi";
+const MANAGEMENT_EMAIL = "hello@supplyping.com";
+
+// Initialize EmailJS once at startup
+try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e) {}
 
 const AIRTABLE_TOKEN = "patkVT1Wc5FP40iAq.f98ab9293b37172e41e3d7a1ce3b58ce2ebcdc1b2b55aeff15a5b47198194d77";
 const AIRTABLE_BASE = "appOkUWfKR5sb2Br4";
@@ -301,14 +305,16 @@ export default function App() {
     if (!alertEmail) return;
     try {
       await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-        cleaning_email: alertEmail,
-        issue: "🧻 No Toilet Paper",
+        cleaning_email: `${alertEmail}, ${MANAGEMENT_EMAIL}`,
+        to_email: `${alertEmail}, ${MANAGEMENT_EMAIL}`,
+        email: alertEmail,
+        issue: "🧻 No Toilet Paper (TEST ALERT)",
         location: location || "Test Location",
         room: "Test Room",
         stall: "Stall 1",
         business: bizName || "Your Business",
         time: new Date().toLocaleString(),
-      }, EMAILJS_PUBLIC_KEY);
+      });
       setTestSent(true);
       showToast("✅ Test alert sent! Check your email.", T.green);
     } catch(e) {
@@ -1017,21 +1023,36 @@ export default function App() {
                 });
               } catch(e) { console.log("Airtable error:", e); }
 
-              // Send email to client team via EmailJS
-              if (cleaningEmail) {
-                try {
-                  await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-                    cleaning_email: cleaningEmail,
-                    issue: issueString,
-                    location: locName,
-                    room: roomName,
-                    stall: `Stall ${stallNum}`,
-                    business: biz,
-                    time: new Date().toLocaleString(),
-                  }, EMAILJS_PUBLIC_KEY);
-                } catch(e) { console.log("Email error:", e); }
+              // Build recipient list: cleaning team + management (always notified)
+              const recipients = [];
+              if (cleaningEmail) recipients.push(cleaningEmail);
+              recipients.push(MANAGEMENT_EMAIL);
+              const toField = recipients.join(", ");
+
+              // Send email alert via EmailJS to cleaning team AND management
+              let emailOk = false;
+              try {
+                await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+                  cleaning_email: toField,
+                  to_email: toField,
+                  email: toField,
+                  issue: issueString,
+                  location: locName,
+                  room: roomName,
+                  stall: `Stall ${stallNum}`,
+                  business: biz,
+                  time: new Date().toLocaleString(),
+                });
+                emailOk = true;
+              } catch(e) {
+                console.log("Email error:", e);
               }
 
+              if (emailOk) {
+                showToast("✅ Report sent! Team notified.", T.green);
+              } else {
+                showToast("⚠️ Report saved. Email alert may be delayed.", T.yellow);
+              }
               setReportDone(true);
             }} disabled={reportIssues.length === 0 && !otherText.trim()} variant="primary" full size="lg" />
             <div style={{ textAlign: "center", marginTop: 16 }}>
