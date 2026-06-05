@@ -173,7 +173,47 @@ const SUPPLIES = SUPPLY_CATEGORIES.flatMap(cat =>
   }))
 );
 
-const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal) => {
+// ── DYNAMIC CHECKLIST BY AREA TYPE ──
+// New QR codes can carry a ?category= (or ?asset_type=) param so the report
+// form shows options relevant to where it was scanned. Existing live QR codes
+// have NO category param — those fall through to the default and keep showing
+// the full current set, so nothing already printed breaks.
+const WAREHOUSE_CATEGORIES = [
+  {
+    id: "warehouse", label: "🏭 Warehouse Issues", color: T.red, bg: T.redLight, border: T.redBorder,
+    items: [
+      { id: "spill", emoji: "⚠️", label: "Spill / Hazard" },
+      { id: "tape", emoji: "🏷️", label: "Tape / Labels Low" },
+      { id: "equipment", emoji: "🛠️", label: "Equipment Issue" },
+    ]
+  },
+];
+
+// Restroom-only set (first category of the full list)
+const RESTROOM_CATEGORIES = [SUPPLY_CATEGORIES[0]];
+
+// Flat lookup of EVERY possible item across all area types (including warehouse)
+// so report submission can resolve any selected id → its label regardless of
+// which dynamic checklist it came from.
+const ALL_ITEMS = [...SUPPLY_CATEGORIES, ...WAREHOUSE_CATEGORIES].flatMap(c => c.items);
+
+// Returns the category groups to display for a given area type.
+// Falls back to the full existing set for empty/missing/unknown values,
+// which is exactly what every current live QR code shows today.
+function getReportCategories(assetType) {
+  switch ((assetType || "").toLowerCase()) {
+    case "warehouse":
+      return WAREHOUSE_CATEGORIES;
+    case "restroom":
+      return RESTROOM_CATEGORIES;
+    case "breakroom":
+      return [SUPPLY_CATEGORIES.find(c => c.id === "breakroom")];
+    default:
+      return SUPPLY_CATEGORIES; // empty / missing / anything else → unchanged
+  }
+}
+
+const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal, categoryVal) => {
   const base = "https://supplyping.com/r";
   const params = new URLSearchParams();
   if (cleaningEmail) params.set("ce", cleaningEmail);
@@ -181,9 +221,20 @@ const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVa
   if (roomName) params.set("r", roomName);
   if (stallNum) params.set("s", stallNum);
   if (bizNameVal) params.set("b", bizNameVal);
+  if (categoryVal && categoryVal !== "default") params.set("category", categoryVal);
   const query = params.toString();
   return query ? `${base}?${query}` : base;
 };
+
+// Area types selectable when registering a location. "default" keeps the full
+// multi-category checklist (and adds no category param, so it's QR-compatible
+// with everything already in the field).
+const AREA_TYPES = [
+  { id: "default", label: "All Categories (default)" },
+  { id: "restroom", label: "🚻 Restroom" },
+  { id: "warehouse", label: "🏭 Warehouse" },
+  { id: "breakroom", label: "☕ Breakroom" },
+];
 
 const qr = (url, size = 130) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1A1814&bgcolor=F8F7F4&margin=8`;
@@ -224,6 +275,72 @@ async function resolveInAirtable(id) {
       body: JSON.stringify({ fields: { "Resolved": true } })
     });
   } catch(e) {}
+}
+
+// ── LOCATION PERSISTENCE (Clients table → "Locations" Long-text field) ──
+// We store the whole locations array (name, stalls, category) as a JSON string
+// on the client's record so it survives logouts without a separate table.
+
+// Find a client's Airtable record id by email. Returns id or null.
+async function findClientRecordId(email) {
+  if (!email) return null;
+  try {
+    const res = await fetch(
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`,
+      { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
+    );
+    const data = await res.json();
+    return data.records && data.records.length > 0 ? data.records[0].id : null;
+  } catch (e) { return null; }
+}
+
+// Persist the locations array to the client's record. Creates the client row
+// if it doesn't exist yet. Safe to call on every add/remove.
+async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
+  if (!email) return;
+  const fields = { "Locations": JSON.stringify(roomsArray || []), ...extra };
+  try {
+    const recordId = await findClientRecordId(email);
+    if (recordId) {
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${recordId}`, {
+        method: "PATCH",
+        headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ fields })
+      });
+    } else {
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { "Email": email, ...fields } })
+      });
+    }
+  } catch (e) { console.log("Save locations error:", e); }
+}
+
+// Load a client's saved profile (locations, facility, cleaning email, business
+// name) by email. Returns null if not found. Used on login to rehydrate state.
+async function loadClientData(email) {
+  if (!email) return null;
+  try {
+    const res = await fetch(
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`,
+      { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (!data.records || data.records.length === 0) return null;
+    const f = data.records[0].fields;
+    let rooms = null;
+    if (f["Locations"]) {
+      try { rooms = JSON.parse(f["Locations"]); } catch (e) { rooms = null; }
+    }
+    return {
+      rooms: Array.isArray(rooms) && rooms.length > 0 ? rooms : null,
+      facility: f["Facility Name"] || "",
+      cleaningEmail: f["Cleaning Team Email"] || "",
+      bizName: f["Business Name"] || "",
+      phone: f["Phone Number"] || "",
+    };
+  } catch (e) { return null; }
 }
 
 function Toast({ msg, color = T.ink }) {
@@ -294,7 +411,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [location, setLocation] = useState("");
-  const [rooms, setRooms] = useState([{ name: "Men's Room", stalls: 2 }, { name: "Women's Room", stalls: 2 }]);
+  const [rooms, setRooms] = useState([{ name: "Warehouse Floor", stalls: 2 }, { name: "Breakroom", stalls: 1 }]);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertPhone, setAlertPhone] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
@@ -309,6 +426,7 @@ export default function App() {
   const [qrLocation, setQrLocation] = useState("");
   const [qrRoom, setQrRoom] = useState("");
   const [qrStall, setQrStall] = useState("");
+  const [qrCategory, setQrCategory] = useState("");
 
   const showToast = (msg, color) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
   const totalQRs = rooms.reduce((s, r) => s + Number(r.stalls || 0), 0);
@@ -380,6 +498,8 @@ export default function App() {
       setQrRoom(params.get("r") || "");
       setQrStall(params.get("s") || "");
       setAlertEmail(params.get("ce") || "");
+      // Accept either ?category= or ?asset_type= to drive the dynamic checklist
+      setQrCategory(params.get("category") || params.get("asset_type") || "");
       setScreen("report");
     }
   }, []);
@@ -486,8 +606,8 @@ export default function App() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
             {[
               { n: "01", emoji: "✍️", title: "Sign Up Free", desc: "Create your account and select your industry. No credit card needed." },
-              { n: "02", emoji: "🚻", title: "Add Bathrooms", desc: "Enter your locations, rooms, and stall counts. We generate everything." },
-              { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post inside each stall door." },
+              { n: "02", emoji: "📍", title: "Add Locations", desc: "Enter your locations and how many units/assets each has. We generate everything." },
+              { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post at each unit/asset." },
               { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan → tap the issue → the right team is notified instantly." },
             ].map(s => (
               <Card key={s.n}>
@@ -526,8 +646,8 @@ export default function App() {
           <p style={{ color: T.muted, fontSize: 15, marginBottom: 48 }}>Start free for 30 days. No credit card required.</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
             {[
-              { name: "Starter", price: "$49", mo: "/mo", features: ["1 facility", "Up to 10 bathrooms", "Email alerts to operations staff", "Live dashboard", "QR code generator"], highlight: false },
-              { name: "Business", price: "$149", mo: "/mo", features: ["Up to 5 facilities", "Unlimited bathrooms", "SMS + Email alerts", "Weekly summary report", "Priority support"], highlight: true },
+              { name: "Starter", price: "$49", mo: "/mo", features: ["1 facility", "Up to 10 locations", "Email alerts to operations staff", "Live dashboard", "QR code generator"], highlight: false },
+              { name: "Business", price: "$149", mo: "/mo", features: ["Up to 5 facilities", "Unlimited locations", "SMS + Email alerts", "Weekly summary report", "Priority support"], highlight: true },
               { name: "Enterprise", price: "Custom", mo: "", features: ["Unlimited facilities", "Door sensor integration", "Custom branding", "API access", "Dedicated support"], highlight: false },
             ].map(p => (
               <div key={p.name} style={{ background: p.highlight ? T.ink : T.white, border: `2px solid ${p.highlight ? T.ink : T.border}`, borderRadius: 18, padding: 28, textAlign: "left", boxShadow: p.highlight ? T.shadowLg : T.shadow }}>
@@ -657,8 +777,17 @@ export default function App() {
             if (!email || !password) { setAuthError("Please enter your email and password."); return; }
             setAuthError(""); setAuthLoading(true);
             const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) { setAuthLoading(false); setAuthError("Invalid email or password. Please try again."); return; }
+            // Rehydrate this client's saved profile + locations from Airtable
+            const profile = await loadClientData(email);
+            if (profile) {
+              if (profile.bizName) setBizName(profile.bizName);
+              if (profile.facility) setLocation(profile.facility);
+              if (profile.cleaningEmail) setAlertEmail(profile.cleaningEmail);
+              if (profile.phone) setAlertPhone(profile.phone);
+              if (profile.rooms) setRooms(profile.rooms);
+            }
             setAuthLoading(false);
-            if (error) { setAuthError("Invalid email or password. Please try again."); return; }
             nav("dashboard");
           }} disabled={!email || !password || authLoading} variant="primary" full />
           <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: T.muted }}>
@@ -687,7 +816,7 @@ export default function App() {
             <div style={{ background: T.ink, width: `${(step / 4) * 100}%`, height: "100%", borderRadius: 100, transition: "width 0.5s ease" }} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-            {["Your Facility", "Bathrooms", "Set Up Alerts", "QR Codes"].map((s, i) => (
+            {["Your Facility", "Locations", "Set Up Alerts", "QR Codes"].map((s, i) => (
               <div key={i} style={{ fontSize: 10, color: step > i ? T.green : step === i + 1 ? T.ink : T.dim, fontWeight: step === i + 1 ? 700 : 400 }}>{s}</div>
             ))}
           </div>
@@ -712,14 +841,14 @@ export default function App() {
         {step === 2 && (
           <>
             <div style={{ fontSize: 44, marginBottom: 16 }}>🚻</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Add your bathrooms</h2>
-            <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>We'll generate a unique QR code for every stall automatically.</p>
+            <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Add your locations</h2>
+            <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>We'll generate a unique QR code for every unit/asset automatically.</p>
             {rooms.map((room, i) => (
               <div key={i} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, marginBottom: 10, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center", boxShadow: T.shadow }}>
-                <input value={room.name} onChange={e => updateRoom(i, "name", e.target.value)} placeholder="e.g. Men's Room — Floor 1"
+                <input value={room.name} onChange={e => updateRoom(i, "name", e.target.value)} placeholder="e.g. Warehouse Floor or Breakroom"
                   style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.cream, outline: "none", width: "100%" }} />
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: T.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Stalls:</span>
+                  <span style={{ fontSize: 11, color: T.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Units/Assets:</span>
                   <select value={room.stalls} onChange={e => updateRoom(i, "stalls", Number(e.target.value))}
                     style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 8px", fontFamily: font.body, fontSize: 13, background: T.cream, color: T.ink, outline: "none" }}>
                     {[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n}</option>)}
@@ -729,10 +858,10 @@ export default function App() {
               </div>
             ))}
             <button onClick={addRoom} style={{ width: "100%", background: "transparent", border: `2px dashed ${T.border}`, borderRadius: 12, padding: "12px", fontFamily: font.body, fontSize: 13, color: T.muted, cursor: "pointer", marginBottom: 16 }}>
-              + Add Another Bathroom
+              + Add Another Location
             </button>
             <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: T.blue, fontWeight: 500 }}>
-              📲 We'll generate <b>{totalQRs} unique QR codes</b> for {rooms.length} bathroom{rooms.length > 1 ? "s" : ""} at {location}
+              📲 We'll generate <b>{totalQRs} unique QR codes</b> for {rooms.length} location{rooms.length > 1 ? "s" : ""} at {location}
             </div>
             <Btn label="Continue →" onClick={() => setStep(3)} disabled={rooms.some(r => !r.name)} variant="primary" full />
           </>
@@ -765,7 +894,7 @@ export default function App() {
               try {
                 const searchRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`, { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } });
                 const searchData = await searchRes.json();
-                const fields = { "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Cleaning Team Email": alertEmail, "Phone Number": alertPhone, "Facility Name": location, "Plan": "Trial", "Client Status": "Trial" };
+                const fields = { "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Cleaning Team Email": alertEmail, "Phone Number": alertPhone, "Facility Name": location, "Plan": "Trial", "Client Status": "Trial", "Locations": JSON.stringify(rooms) };
                 if (searchData.records && searchData.records.length > 0) {
                   await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${searchData.records[0].id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
                 } else {
@@ -781,15 +910,15 @@ export default function App() {
           <>
             <div style={{ fontSize: 44, marginBottom: 16 }}>🎉</div>
             <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Your QR codes are ready!</h2>
-            <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>{totalQRs} unique QR codes for {location}. Print, laminate, and post inside each stall.</p>
+            <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>{totalQRs} unique QR codes for {location}. Print, laminate, and post at each unit/asset.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
               {rooms.flatMap((room, ri) =>
                 Array.from({ length: room.stalls }, (_, si) => {
-                  const formUrl = buildFormUrl(alertEmail, location, room.name, si + 1);
+                  const formUrl = buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                   return (
                     <div key={`${ri}-${si}`} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, textAlign: "center", boxShadow: T.shadow }}>
                       <img src={qr(formUrl)} alt="" style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
-                      <div style={{ fontSize: 12, fontWeight: 700 }}>Stall {si + 1}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>Unit/Asset {si + 1}</div>
                       <div style={{ fontSize: 10, color: T.muted, marginTop: 2 }}>{room.name}</div>
                       <button onClick={() => {
                         const link = document.createElement("a");
@@ -807,7 +936,7 @@ export default function App() {
             </div>
             <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 12, padding: 18, marginBottom: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.green, marginBottom: 10 }}>🖨️ How to install</div>
-              {["Print on card stock — 4×4 inches is perfect", "Laminate or cover with clear packing tape", "Post inside each stall door at eye level", "Test each QR with your phone before leaving", "Workers scan → cleaning team gets email alert instantly"].map((s, i) => (
+              {["Print on card stock — 4×4 inches is perfect", "Laminate or cover with clear packing tape", "Post at each unit/asset at eye level", "Test each QR with your phone before leaving", "Workers scan → cleaning team gets email alert instantly"].map((s, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 13, color: T.green }}>
                   <span style={{ fontWeight: 700 }}>{i+1}.</span><span>{s}</span>
                 </div>
@@ -835,13 +964,13 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Btn label="🚻 Status Board" onClick={() => nav("status")} variant="outline" size="sm" />
-          <Btn label="🚿 Manage Bathrooms" onClick={() => nav("manage")} variant="outline" size="sm" />
+          <Btn label="🚿 Manage Locations" onClick={() => nav("manage")} variant="outline" size="sm" />
           <Btn label={loadingReports ? "⏳ Loading..." : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports().then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
             setLocation(""); setAlertEmail(""); setAlertPhone("");
-            setRooms([{ name: "Men's Room", stalls: 2 }, { name: "Women's Room", stalls: 2 }]);
+            setRooms([{ name: "Warehouse Floor", stalls: 2 }, { name: "Breakroom", stalls: 1 }]);
             showToast("👋 Logged out successfully!", T.green);
             nav("landing");
           }} variant="outline" size="sm" />
@@ -854,7 +983,7 @@ export default function App() {
           <div style={{ fontSize: 44 }}>{open.length === 0 ? "✅" : "🚨"}</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, color: open.length === 0 ? T.green : T.red }}>
-              {open.length === 0 ? "All Bathrooms Fully Stocked!" : `${open.length} Active Issue${open.length > 1 ? "s" : ""} Need Attention`}
+              {open.length === 0 ? "All Locations Fully Stocked!" : `${open.length} Active Issue${open.length > 1 ? "s" : ""} Need Attention`}
             </div>
             <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
               {open.length === 0 ? "No action needed right now." : "Cleaning team has been notified. Tap ✓ Fixed It when resolved."}
@@ -889,7 +1018,7 @@ export default function App() {
           </Card>
         ) : open.length === 0 ? (
           <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 14, padding: 28, textAlign: "center", color: T.green, fontSize: 14, fontWeight: 500 }}>
-            🎉 All clear — every bathroom is fully stocked!
+            🎉 All clear — every location is fully stocked!
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
@@ -936,7 +1065,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
           <div>
-            <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Manage Bathrooms</div>
+            <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Manage Locations</div>
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
@@ -954,30 +1083,42 @@ export default function App() {
 
         {/* Add New */}
         <Card style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 14 }}>+ Add New Bathroom</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", marginBottom: 14 }}>
-            <input placeholder="e.g. Men's Room — Floor 3" id="newRoomInput"
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 14 }}>+ Add New Location</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", marginBottom: 12 }}>
+            <input placeholder="e.g. Warehouse Floor or Breakroom" id="newRoomInput"
               style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.cream, outline: "none" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, color: T.muted, fontWeight: 500 }}>Stalls:</span>
+              <span style={{ fontSize: 12, color: T.muted, fontWeight: 500 }}>Units/Assets:</span>
               <select id="newStallCount" style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "12px 8px", fontFamily: font.body, fontSize: 13, background: T.cream, color: T.ink, outline: "none" }}>
                 {[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
           </div>
-          <Btn label="Add Bathroom & Generate QR Codes →" onClick={() => {
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <span style={{ fontSize: 12, color: T.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Area type:</span>
+            <select id="newAreaType" style={{ flex: 1, border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "12px 10px", fontFamily: font.body, fontSize: 13, background: T.cream, color: T.ink, outline: "none" }}>
+              {AREA_TYPES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+          </div>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 14, lineHeight: 1.5 }}>
+            The area type sets which report options appear when this location's QR code is scanned. "All Categories" shows the full checklist.
+          </div>
+          <Btn label="Add Location & Generate QR Codes →" onClick={() => {
             const name = document.getElementById("newRoomInput").value;
             const stalls = Number(document.getElementById("newStallCount").value);
-            if (!name) { showToast("Please enter a bathroom name", T.red); return; }
-            setRooms(p => [...p, { name, stalls }]);
+            const category = document.getElementById("newAreaType").value;
+            if (!name) { showToast("Please enter a location name", T.red); return; }
+            const updated = [...rooms, { name, stalls, category }];
+            setRooms(updated);
+            saveLocationsToAirtable(email, updated, { "Facility Name": location, "Cleaning Team Email": alertEmail });
             document.getElementById("newRoomInput").value = "";
-            showToast("✅ Bathroom added! QR codes generated below.", T.green);
+            showToast("✅ Location added & saved! QR codes generated below.", T.green);
           }} variant="orange" />
         </Card>
 
         {/* Existing Bathrooms */}
         <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 16 }}>
-          {rooms.length} Bathroom{rooms.length > 1 ? "s" : ""} · {totalQRs} QR Code{totalQRs > 1 ? "s" : ""}
+          {rooms.length} Location{rooms.length > 1 ? "s" : ""} · {totalQRs} QR Code{totalQRs > 1 ? "s" : ""}
         </div>
 
         {rooms.map((room, ri) => (
@@ -985,17 +1126,19 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div>
                 <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{room.name}</div>
-                <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{room.stalls} stall{room.stalls > 1 ? "s" : ""} · {room.stalls} QR code{room.stalls > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+                  {room.stalls} unit/asset{room.stalls > 1 ? "s" : ""} · {AREA_TYPES.find(a => a.id === (room.category || "default"))?.label || "All Categories"}
+                </div>
               </div>
-              <Btn label="Remove" onClick={() => { setRooms(p => p.filter((_, i) => i !== ri)); showToast("🗑️ Bathroom removed", T.red); }} variant="outline" size="sm" />
+              <Btn label="Remove" onClick={() => { const updated = rooms.filter((_, i) => i !== ri); setRooms(updated); saveLocationsToAirtable(email, updated, { "Facility Name": location, "Cleaning Team Email": alertEmail }); showToast("🗑️ Location removed & saved", T.red); }} variant="outline" size="sm" />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
               {Array.from({ length: room.stalls }, (_, si) => {
-                const formUrl = buildFormUrl(alertEmail, location, room.name, si + 1);
+                const formUrl = buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                 return (
                   <div key={si} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, textAlign: "center" }}>
                     <img src={qr(formUrl)} alt="" style={{ width: 110, height: 110, borderRadius: 8, marginBottom: 8 }} />
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>Stall {si + 1}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>Unit/Asset {si + 1}</div>
                     <div style={{ fontSize: 9, color: T.muted, marginTop: 2 }}>{room.name}</div>
                     <button onClick={() => {
                       const link = document.createElement("a");
@@ -1015,7 +1158,7 @@ export default function App() {
 
         <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 12, padding: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.green, marginBottom: 10 }}>🖨️ Print & Install Instructions</div>
-          {["Download each QR code using the button above", "Print on card stock — 4×4 inches is best", "Laminate or cover with clear packing tape", "Post inside each stall door at eye level", "Scan with your phone to confirm it opens correctly"].map((s, i) => (
+          {["Download each QR code using the button above", "Print on card stock — 4×4 inches is best", "Laminate or cover with clear packing tape", "Post at each unit/asset at eye level", "Scan with your phone to confirm it opens correctly"].map((s, i) => (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 13, color: T.green }}>
               <span style={{ fontWeight: 700 }}>{i+1}.</span><span>{s}</span>
             </div>
@@ -1040,7 +1183,7 @@ export default function App() {
               <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select the issue category. Takes 10 seconds.</p>
               {(qrRoom || qrLocation) && (
                 <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, display: "inline-block", marginTop: 6 }}>
-                  📍 {[qrLocation, qrRoom, qrStall ? `Stall ${qrStall}` : ""].filter(Boolean).join(" · ")}
+                  📍 {[qrLocation, qrRoom, qrStall ? `Unit/Asset ${qrStall}` : ""].filter(Boolean).join(" · ")}
                 </div>
               )}
               {!qrLocation && !qrRoom && (
@@ -1058,7 +1201,7 @@ export default function App() {
               ✓ Select one or more issues, then tap Send
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
-              {SUPPLY_CATEGORIES.map(cat => (
+              {getReportCategories(qrCategory).map(cat => (
                 <div key={cat.id}>
                   <div style={{ fontSize: 11, color: cat.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, fontFamily: font.body, padding: "4px 0" }}>
                     {cat.label}
@@ -1100,7 +1243,7 @@ export default function App() {
             )}
 
             <Btn label="Send Report →" onClick={async () => {
-              const selectedLabels = reportIssues.map(id => SUPPLIES.find(s => s.id === id)?.label).filter(Boolean);
+              const selectedLabels = reportIssues.map(id => ALL_ITEMS.find(s => s.id === id)?.label).filter(Boolean);
               if (otherText.trim()) selectedLabels.push(`Other: ${otherText.trim()}`);
               if (selectedLabels.length === 0) return;
               const issueString = selectedLabels.join(", ");
@@ -1180,7 +1323,7 @@ export default function App() {
       {toast && <Toast msg={toast.msg} color={toast.color} />}
       <div style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "20px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, margin: "0 0 4px" }}>Live Bathroom Status</h2>
+          <h2 style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, margin: "0 0 4px" }}>Live Location Status</h2>
           <p style={{ fontSize: 13, color: T.muted, margin: 0 }}>SupplyPing Facility Operations — Updates automatically</p>
         </div>
         <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
@@ -1188,7 +1331,7 @@ export default function App() {
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 24px" }}>
         {alerts.length === 0 ? (
           <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 14, padding: 28, textAlign: "center", color: T.green, fontSize: 14 }}>
-            🎉 All bathrooms are fully stocked — nothing to report!
+            🎉 All locations are fully stocked — nothing to report!
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
