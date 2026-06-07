@@ -1,62 +1,66 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import emailjs from "@emailjs/browser";
 
-const EMAILJS_SERVICE = "service_9f62cg2";
-const EMAILJS_TEMPLATE = "template_58s7r9h";
-const EMAILJS_PUBLIC_KEY = "WZ68pLc75xuy8hcHi";
+// ── CONFIG ──
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/mkoezyoe";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
-// Initialize EmailJS once at startup
-try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch(e) {}
+const AIRTABLE_TOKEN = "patkVT1Wc5FP40iAq.f98ab9293b37172e41e3d7a1ce3b58ce2ebcdc1b2b55aeff15a5b47198194d77";
+const AIRTABLE_BASE = "appOkUWfKR5sb2Br4";
+
+const WEB3FORMS_KEY = "7f502c28-1de9-4159-807c-773d5f4d5cbb";
 
 // ── OFFLINE-FIRST REPORT QUEUE ──
-// Restrooms & supply rooms are signal dead zones. If a worker submits a report
-// while offline, we stash the EmailJS template params in localStorage and flush
-// them automatically the moment connectivity returns.
+// Restrooms & supply rooms are signal dead zones. If a worker submits while
+// offline, we stash the payload in localStorage and flush it automatically the
+// moment connectivity returns.
 const QUEUE_KEY = "supplyping_offline_queue";
 
 function readQueue() {
   try {
     const raw = localStorage.getItem(QUEUE_KEY);
     return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
+  } catch (e) { return []; }
 }
 
 function writeQueue(queue) {
-  try {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-  } catch (e) {}
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queue)); } catch (e) {}
 }
 
-function queueReport(templateParams) {
+function queueReport(payload) {
   const queue = readQueue();
-  queue.push({ params: templateParams, savedAt: Date.now() });
+  queue.push({ params: payload, savedAt: Date.now() });
   writeQueue(queue);
 }
 
-// Sends an alert if online; queues it to localStorage if offline.
-// Returns: "sent" | "queued" | "failed"
-async function sendOrQueueAlert(templateParams) {
-  // navigator.onLine === false is a reliable "definitely offline" signal
+// The single sender — POSTs the alert to Formspree.
+async function postToFormspree(payload) {
+  const res = await fetch(FORMSPREE_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Formspree ${res.status}`);
+  return res;
+}
+
+// Sends an alert if online; queues it to localStorage if offline or on failure.
+// Returns: "sent" | "queued"
+async function sendOrQueueAlert(payload) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    queueReport(templateParams);
+    queueReport(payload);
     return "queued";
   }
   try {
-    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, templateParams);
+    await postToFormspree(payload);
     return "sent";
   } catch (e) {
-    // The send failed even though the browser believed it was online
-    // (captive portal, weak signal, timeout). Queue it so it isn't lost.
-    queueReport(templateParams);
+    queueReport(payload);
     return "queued";
   }
 }
 
-// Flush every queued report back to EmailJS. Re-queues any that still fail.
+// Flush every queued report back to Formspree. Re-queues any that still fail.
 async function flushQueue() {
   const queue = readQueue();
   if (queue.length === 0) return 0;
@@ -64,20 +68,17 @@ async function flushQueue() {
   let flushed = 0;
   for (const entry of queue) {
     try {
-      await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, entry.params);
+      await postToFormspree(entry.params);
       flushed++;
     } catch (e) {
-      remaining.push(entry); // keep it for the next attempt
+      remaining.push(entry);
     }
   }
   writeQueue(remaining);
   return flushed;
 }
 
-const AIRTABLE_TOKEN = "patkVT1Wc5FP40iAq.f98ab9293b37172e41e3d7a1ce3b58ce2ebcdc1b2b55aeff15a5b47198194d77";
-const AIRTABLE_BASE = "appOkUWfKR5sb2Br4";
-const AIRTABLE_BASE_FORM = "https://airtable.com/appOkUWfKR5sb2Br4/shr6E9eQcAhQ5I7En";
-
+// ── DESIGN TOKENS ──
 const T = {
   ink: "#1A1814", cream: "#F8F7F4", white: "#FFFFFF", border: "#E8E5DF",
   muted: "#9B9690", dim: "#C8C5BE",
@@ -116,6 +117,7 @@ const INDUSTRIES = [
   { id: "other", emoji: "➕", label: "Others" },
 ];
 
+// ── REPORT CATEGORIES ──
 const SUPPLY_CATEGORIES = [
   {
     id: "restroom", label: "🚻 Restroom Supplies", color: T.blue, bg: T.blueLight, border: T.blueBorder,
@@ -164,20 +166,9 @@ const SUPPLY_CATEGORIES = [
 ];
 
 const SUPPLIES = SUPPLY_CATEGORIES.flatMap(cat =>
-  cat.items.map(item => ({
-    ...item,
-    category: cat.id,
-    color: cat.color,
-    bg: cat.bg,
-    border: cat.border,
-  }))
+  cat.items.map(item => ({ ...item, category: cat.id, color: cat.color, bg: cat.bg, border: cat.border }))
 );
 
-// ── DYNAMIC CHECKLIST BY AREA TYPE ──
-// New QR codes can carry a ?category= (or ?asset_type=) param so the report
-// form shows options relevant to where it was scanned. Existing live QR codes
-// have NO category param — those fall through to the default and keep showing
-// the full current set, so nothing already printed breaks.
 const WAREHOUSE_CATEGORIES = [
   {
     id: "warehouse", label: "🏭 Warehouse Issues", color: T.red, bg: T.redLight, border: T.redBorder,
@@ -189,29 +180,24 @@ const WAREHOUSE_CATEGORIES = [
   },
 ];
 
-// Restroom-only set (first category of the full list)
 const RESTROOM_CATEGORIES = [SUPPLY_CATEGORIES[0]];
-
-// Flat lookup of EVERY possible item across all area types (including warehouse)
-// so report submission can resolve any selected id → its label regardless of
-// which dynamic checklist it came from.
 const ALL_ITEMS = [...SUPPLY_CATEGORIES, ...WAREHOUSE_CATEGORIES].flatMap(c => c.items);
 
-// Returns the category groups to display for a given area type.
-// Falls back to the full existing set for empty/missing/unknown values,
-// which is exactly what every current live QR code shows today.
 function getReportCategories(assetType) {
   switch ((assetType || "").toLowerCase()) {
-    case "warehouse":
-      return WAREHOUSE_CATEGORIES;
-    case "restroom":
-      return RESTROOM_CATEGORIES;
-    case "breakroom":
-      return [SUPPLY_CATEGORIES.find(c => c.id === "breakroom")];
-    default:
-      return SUPPLY_CATEGORIES; // empty / missing / anything else → unchanged
+    case "warehouse": return WAREHOUSE_CATEGORIES;
+    case "restroom": return RESTROOM_CATEGORIES;
+    case "breakroom": return [SUPPLY_CATEGORIES.find(c => c.id === "breakroom")];
+    default: return SUPPLY_CATEGORIES;
   }
 }
+
+const AREA_TYPES = [
+  { id: "default", label: "All Categories (default)" },
+  { id: "restroom", label: "🚻 Restroom" },
+  { id: "warehouse", label: "🏭 Warehouse" },
+  { id: "breakroom", label: "☕ Breakroom" },
+];
 
 const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal, categoryVal) => {
   const base = "https://supplyping.com/r";
@@ -226,19 +212,10 @@ const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVa
   return query ? `${base}?${query}` : base;
 };
 
-// Area types selectable when registering a location. "default" keeps the full
-// multi-category checklist (and adds no category param, so it's QR-compatible
-// with everything already in the field).
-const AREA_TYPES = [
-  { id: "default", label: "All Categories (default)" },
-  { id: "restroom", label: "🚻 Restroom" },
-  { id: "warehouse", label: "🏭 Warehouse" },
-  { id: "breakroom", label: "☕ Breakroom" },
-];
-
 const qr = (url, size = 130) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1A1814&bgcolor=F8F7F4&margin=8`;
 
+// ── AIRTABLE ──
 async function fetchReports() {
   try {
     const res = await fetch(
@@ -249,7 +226,7 @@ async function fetchReports() {
     if (!data.records) return [];
     return data.records.map(r => {
       const status = r.fields["Status"] || "";
-      const supply = SUPPLIES.find(s => s.label === status) || SUPPLIES[0];
+      const supply = ALL_ITEMS.find(s => status.includes(s.label)) || { emoji: "📋", label: status || "Issue", color: T.orange, bg: T.orangeLight, border: T.orangeBorder, id: "general" };
       const createdAt = r.fields["Created Time"] ? new Date(r.fields["Created Time"]) : new Date();
       const diff = Math.round((Date.now() - createdAt.getTime()) / 60000);
       const timeAgo = diff < 1 ? "just now" : diff < 60 ? `${diff} min ago` : diff < 1440 ? `${Math.round(diff/60)} hr ago` : `${Math.round(diff/1440)}d ago`;
@@ -259,12 +236,23 @@ async function fetchReports() {
         stall: r.fields["Stall"] || "General",
         location: r.fields["Location"] || "",
         cleaningEmail: r.fields["Cleaning Team Email"] || "",
+        status,
         supply,
         time: timeAgo,
         resolved: r.fields["Resolved"] || false,
       };
     });
-  } catch(e) { return []; }
+  } catch (e) { return []; }
+}
+
+async function submitReportToAirtable(fields) {
+  try {
+    await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ fields })
+    });
+  } catch (e) { console.log("Airtable submit error:", e); }
 }
 
 async function resolveInAirtable(id) {
@@ -274,14 +262,10 @@ async function resolveInAirtable(id) {
       headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ fields: { "Resolved": true } })
     });
-  } catch(e) {}
+  } catch (e) {}
 }
 
 // ── LOCATION PERSISTENCE (Clients table → "Locations" Long-text field) ──
-// We store the whole locations array (name, stalls, category) as a JSON string
-// on the client's record so it survives logouts without a separate table.
-
-// Find a client's Airtable record id by email. Returns id or null.
 async function findClientRecordId(email) {
   if (!email) return null;
   try {
@@ -294,8 +278,6 @@ async function findClientRecordId(email) {
   } catch (e) { return null; }
 }
 
-// Persist the locations array to the client's record. Creates the client row
-// if it doesn't exist yet. Safe to call on every add/remove.
 async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
   if (!email) return;
   const fields = { "Locations": JSON.stringify(roomsArray || []), ...extra };
@@ -317,8 +299,6 @@ async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
   } catch (e) { console.log("Save locations error:", e); }
 }
 
-// Load a client's saved profile (locations, facility, cleaning email, business
-// name) by email. Returns null if not found. Used on login to rehydrate state.
 async function loadClientData(email) {
   if (!email) return null;
   try {
@@ -330,9 +310,7 @@ async function loadClientData(email) {
     if (!data.records || data.records.length === 0) return null;
     const f = data.records[0].fields;
     let rooms = null;
-    if (f["Locations"]) {
-      try { rooms = JSON.parse(f["Locations"]); } catch (e) { rooms = null; }
-    }
+    if (f["Locations"]) { try { rooms = JSON.parse(f["Locations"]); } catch (e) { rooms = null; } }
     return {
       rooms: Array.isArray(rooms) && rooms.length > 0 ? rooms : null,
       facility: f["Facility Name"] || "",
@@ -343,9 +321,10 @@ async function loadClientData(email) {
   } catch (e) { return null; }
 }
 
+// ── UI PRIMITIVES ──
 function Toast({ msg, color = T.ink }) {
   return (
-    <div style={{ position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)", background: color, color: T.white, borderRadius: 100, padding: "12px 28px", fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: T.shadowLg, whiteSpace: "nowrap", fontFamily: font.body }}>
+    <div style={{ position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)", background: color, color: T.white, borderRadius: 100, padding: "12px 28px", fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: T.shadowLg, maxWidth: "90%", textAlign: "center", fontFamily: font.body }}>
       {msg}
     </div>
   );
@@ -411,7 +390,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [location, setLocation] = useState("");
-  const [rooms, setRooms] = useState([{ name: "Warehouse Floor", stalls: 2 }, { name: "Breakroom", stalls: 1 }]);
+  const [rooms, setRooms] = useState([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Breakroom", stalls: 1, category: "breakroom" }]);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertPhone, setAlertPhone] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
@@ -428,7 +407,7 @@ export default function App() {
   const [qrStall, setQrStall] = useState("");
   const [qrCategory, setQrCategory] = useState("");
 
-  const showToast = (msg, color) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
+  const showToast = (msg, color) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
   const totalQRs = rooms.reduce((s, r) => s + Number(r.stalls || 0), 0);
   const open = alerts.filter(a => !a.resolved);
   const resolved = alerts.filter(a => a.resolved);
@@ -439,7 +418,7 @@ export default function App() {
     showToast("✅ Issue marked as resolved!", T.green);
   };
 
-  const addRoom = () => setRooms(p => [...p, { name: "", stalls: 1 }]);
+  const addRoom = () => setRooms(p => [...p, { name: "", stalls: 1, category: "default" }]);
   const updateRoom = (i, f, v) => setRooms(p => p.map((r, idx) => idx === i ? { ...r, [f]: v } : r));
   const removeRoom = (i) => setRooms(p => p.filter((_, idx) => idx !== i));
 
@@ -456,49 +435,34 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== "dashboard") return;
-    const interval = setInterval(() => {
-      fetchReports().then(data => setAlerts(data));
-    }, 30000);
+    const interval = setInterval(() => { fetchReports().then(data => setAlerts(data)); }, 30000);
     return () => clearInterval(interval);
   }, [screen]);
 
-  // ── OFFLINE QUEUE SYNC ──
-  // When connectivity returns, automatically flush any reports that were
-  // submitted while offline. Also attempt a flush on first load in case the
-  // app reopened online with items still queued from a previous session.
+  // Offline queue sync: flush on mount and whenever connectivity returns
   useEffect(() => {
     const syncQueue = async () => {
       const flushed = await flushQueue();
-      if (flushed > 0) {
-        showToast(`📡 Back online — ${flushed} queued report${flushed > 1 ? "s" : ""} sent!`, T.green);
-      }
+      if (flushed > 0) showToast(`📡 Back online — ${flushed} queued report${flushed > 1 ? "s" : ""} sent!`, T.green);
     };
-    // Try once on mount (covers "reopened online with a backlog")
     syncQueue();
-    // And every time the browser regains connectivity
     window.addEventListener("online", syncQueue);
     return () => window.removeEventListener("online", syncQueue);
   }, []);
 
+  // QR scan detection + ?location= prefill
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname;
     const isQR = path === "/r" || path.startsWith("/r/") || params.has("ce") || params.has("l");
-
-    // Pre-fill location from ?location= URL param (works on any page)
     const locationParam = params.get("location");
-    if (locationParam) {
-      setLocation(locationParam);
-      setQrLocation(locationParam);
-    }
-
+    if (locationParam) { setLocation(locationParam); setQrLocation(locationParam); }
     if (isQR) {
       setQrBusiness(params.get("b") || "");
       setQrLocation(params.get("l") || locationParam || "");
       setQrRoom(params.get("r") || "");
       setQrStall(params.get("s") || "");
       setAlertEmail(params.get("ce") || "");
-      // Accept either ?category= or ?asset_type= to drive the dynamic checklist
       setQrCategory(params.get("category") || params.get("asset_type") || "");
       setScreen("report");
     }
@@ -506,38 +470,20 @@ export default function App() {
 
   const sendTestAlert = async () => {
     if (!alertEmail) return;
-    try {
-      await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-        cleaning_email: `${alertEmail}, ${MANAGEMENT_EMAIL}`,
-        to_email: `${alertEmail}, ${MANAGEMENT_EMAIL}`,
-        email: alertEmail,
-        issue: "🧻 No Toilet Paper (TEST ALERT)",
-        location: location || "Test Location",
-        room: "Test Room",
-        stall: "Stall 1",
-        business: bizName || "Your Business",
-        time: new Date().toLocaleString(),
-      });
-      setTestSent(true);
-      showToast("✅ Test alert sent! Check your email.", T.green);
-    } catch(e) {
-      showToast("❌ Test failed. Check your email settings.", T.red);
-    }
-  };
-
-  const sendAlert = async (issue, loc, room, stall, cleaningEmail, business) => {
-    if (!cleaningEmail) return;
-    try {
-      await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-        cleaning_email: cleaningEmail,
-        issue: issue,
-        location: loc,
-        room: room,
-        stall: stall,
-        business: business,
-        time: new Date().toLocaleString(),
-      }, EMAILJS_PUBLIC_KEY);
-    } catch(e) { console.log("Alert error:", e); }
+    const payload = {
+      _subject: "🧪 SupplyPing Test Alert",
+      issue: "🧻 No Toilet Paper (TEST ALERT)",
+      location: location || "Test Location",
+      room: "Test Room",
+      stall: "Stall 1",
+      business: bizName || "Your Business",
+      cleaning_email: alertEmail,
+      management_email: MANAGEMENT_EMAIL,
+      time: new Date().toLocaleString(),
+    };
+    const result = await sendOrQueueAlert(payload);
+    if (result === "sent") { setTestSent(true); showToast("✅ Test alert sent! Check your inbox.", T.green); }
+    else { showToast("📡 Saved offline — will send when back online.", T.yellow); }
   };
 
   // ── LANDING ──
@@ -545,18 +491,16 @@ export default function App() {
     <div style={{ fontFamily: font.body, background: T.white, color: T.ink, minHeight: "100vh" }}>
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         * { box-sizing: border-box; }
       `}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
 
-      {/* NAV */}
-      <nav style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, padding: "0 48px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
+      <nav style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>SupplyPing</div>
-            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase", fontFamily: font.body }}>FACILITY OPERATIONS PLATFORM</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase" }}>FACILITY OPERATIONS PLATFORM</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -565,29 +509,27 @@ export default function App() {
         </div>
       </nav>
 
-      {/* HERO */}
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "100px 48px 80px", textAlign: "center" }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 64px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
           Free 30-Day Pilot — Metro Detroit Businesses & Facilities
         </div>
-        <h1 style={{ fontFamily: font.display, fontSize: 68, fontWeight: 700, margin: "0 0 24px", letterSpacing: -3, lineHeight: 1.0 }}>
+        <h1 style={{ fontFamily: font.display, fontSize: 56, fontWeight: 700, margin: "0 0 24px", letterSpacing: -2.5, lineHeight: 1.05 }}>
           Know Before<br />You Go <span style={{ color: T.orange }}>🚻</span>
         </h1>
-        <p style={{ fontSize: 19, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
+        <p style={{ fontSize: 18, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
           Real-time workplace supply & facility alerts for offices, warehouses, retail, and campuses. From restroom supplies to equipment failures — covered.
         </p>
-        <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 40px", lineHeight: 1.6 }}>
-          Workers scan a QR code → tap the issue → the right team is notified instantly. Set up in 10 minutes. No IT team needed.
+        <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 36px", lineHeight: 1.6 }}>
+          Workers scan a QR code → tap the issue → the right team is notified instantly. Set up in 10 minutes.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
-          <Btn label="Start Free Trial — No Credit Card →" onClick={() => nav("signup")} variant="primary" size="lg" />
+          <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="primary" size="lg" />
           <Btn label="See How It Works →" onClick={() => nav("report")} variant="outline" size="lg" />
         </div>
-        <div style={{ fontSize: 12, color: T.dim }}>✓ No credit card &nbsp;&nbsp; ✓ Setup in 10 min &nbsp;&nbsp; ✓ Cancel anytime</div>
+        <div style={{ fontSize: 12, color: T.dim }}>✓ No credit card &nbsp; ✓ Setup in 10 min &nbsp; ✓ Cancel anytime</div>
 
-        {/* Category badges */}
-        <div style={{ marginTop: 56, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+        <div style={{ marginTop: 48, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
           {SUPPLY_CATEGORIES.map(cat => (
             <div key={cat.id} style={{ background: cat.bg, border: `1px solid ${cat.border}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: cat.color }}>
               {cat.label}
@@ -596,17 +538,16 @@ export default function App() {
         </div>
       </div>
 
-      {/* HOW IT WORKS */}
-      <div style={{ background: T.cream, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "80px 48px" }}>
+      <div style={{ background: T.cream, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "64px 24px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
             <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 600 }}>How It Works</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 40, fontWeight: 700, margin: 0, letterSpacing: -1.5 }}>Up and running in 10 minutes</h2>
+            <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: 0, letterSpacing: -1.2 }}>Up and running in 10 minutes</h2>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
             {[
               { n: "01", emoji: "✍️", title: "Sign Up Free", desc: "Create your account and select your industry. No credit card needed." },
-              { n: "02", emoji: "📍", title: "Add Locations", desc: "Enter your locations and how many units/assets each has. We generate everything." },
+              { n: "02", emoji: "📍", title: "Add Locations", desc: "Enter your locations and how many units/assets each has." },
               { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post at each unit/asset." },
               { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan → tap the issue → the right team is notified instantly." },
             ].map(s => (
@@ -621,15 +562,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* INDUSTRIES */}
-      <div style={{ padding: "80px 48px" }}>
+      <div style={{ padding: "64px 24px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", textAlign: "center" }}>
           <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 600 }}>Built For Every Facility</div>
-          <h2 style={{ fontFamily: font.display, fontSize: 40, fontWeight: 700, margin: "0 0 40px", letterSpacing: -1.5 }}>One solution. Every industry.</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 10 }}>
+          <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 36px", letterSpacing: -1.2 }}>One solution. Every industry.</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10 }}>
             {INDUSTRIES.map(i => (
-              <div key={i.id} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 8px", textAlign: "center", cursor: "pointer" }}
-                onClick={() => nav("signup")}>
+              <div key={i.id} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 8px", textAlign: "center", cursor: "pointer" }} onClick={() => nav("signup")}>
                 <div style={{ fontSize: 22, marginBottom: 6 }}>{i.emoji}</div>
                 <div style={{ fontSize: 10, fontWeight: 500, color: T.ink, lineHeight: 1.3 }}>{i.label}</div>
               </div>
@@ -638,17 +577,16 @@ export default function App() {
         </div>
       </div>
 
-      {/* PRICING */}
-      <div style={{ background: T.cream, borderTop: `1px solid ${T.border}`, padding: "80px 48px" }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ background: T.cream, borderTop: `1px solid ${T.border}`, padding: "64px 24px" }}>
+        <div style={{ maxWidth: 880, margin: "0 auto", textAlign: "center" }}>
           <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 600 }}>Pricing</div>
-          <h2 style={{ fontFamily: font.display, fontSize: 40, fontWeight: 700, margin: "0 0 8px", letterSpacing: -1.5 }}>Simple, honest pricing.</h2>
-          <p style={{ color: T.muted, fontSize: 15, marginBottom: 48 }}>Start free for 30 days. No credit card required.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 8px", letterSpacing: -1.2 }}>Simple, honest pricing.</h2>
+          <p style={{ color: T.muted, fontSize: 15, marginBottom: 40 }}>Start free for 30 days. No credit card required.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             {[
               { name: "Starter", price: "$49", mo: "/mo", features: ["1 facility", "Up to 10 locations", "Email alerts to operations staff", "Live dashboard", "QR code generator"], highlight: false },
               { name: "Business", price: "$149", mo: "/mo", features: ["Up to 5 facilities", "Unlimited locations", "SMS + Email alerts", "Weekly summary report", "Priority support"], highlight: true },
-              { name: "Enterprise", price: "Custom", mo: "", features: ["Unlimited facilities", "Door sensor integration", "Custom branding", "API access", "Dedicated support"], highlight: false },
+              { name: "Enterprise", price: "Custom", mo: "", features: ["Unlimited facilities", "Sensor integration", "Custom branding", "API access", "Dedicated support"], highlight: false },
             ].map(p => (
               <div key={p.name} style={{ background: p.highlight ? T.ink : T.white, border: `2px solid ${p.highlight ? T.ink : T.border}`, borderRadius: 18, padding: 28, textAlign: "left", boxShadow: p.highlight ? T.shadowLg : T.shadow }}>
                 <div style={{ fontSize: 11, color: p.highlight ? "#888" : T.muted, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, fontWeight: 600 }}>{p.name}</div>
@@ -668,37 +606,30 @@ export default function App() {
         </div>
       </div>
 
-      {/* FOOTER CTA */}
-      <div style={{ background: "linear-gradient(135deg, #1A1814 0%, #2a2420 100%)", padding: "100px 48px", textAlign: "center" }}>
+      <div style={{ background: "linear-gradient(135deg, #1A1814 0%, #2a2420 100%)", padding: "80px 24px", textAlign: "center" }}>
         <div style={{ fontSize: 11, color: "#555", letterSpacing: 3, textTransform: "uppercase", marginBottom: 20, fontWeight: 600 }}>GET STARTED TODAY</div>
-        <h2 style={{ fontFamily: font.display, fontSize: 48, fontWeight: 700, color: T.white, margin: "0 0 16px", letterSpacing: -2 }}>
+        <h2 style={{ fontFamily: font.display, fontSize: 40, fontWeight: 700, color: T.white, margin: "0 0 16px", letterSpacing: -1.5 }}>
           Ready to streamline<br />your facility operations?
         </h2>
-        <p style={{ color: "#888", fontSize: 16, marginBottom: 40, maxWidth: 480, margin: "0 auto 40px", lineHeight: 1.6 }}>
+        <p style={{ color: "#888", fontSize: 16, marginBottom: 36, maxWidth: 480, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
           Free for 30 days. Set up in 10 minutes. No credit card required.
         </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="orange" size="lg" />
           <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hello@supplyping.com&su=SupplyPing%20Inquiry" target="_blank" rel="noreferrer" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
             Email Us →
           </a>
         </div>
-        <div style={{ marginTop: 48, paddingTop: 32, borderTop: "1px solid #222", display: "flex", justifyContent: "center", gap: 40, fontSize: 13, color: "#444", flexWrap: "wrap" }}>
+        <div style={{ marginTop: 48, paddingTop: 32, borderTop: "1px solid #222", display: "flex", justifyContent: "center", gap: 32, fontSize: 13, color: "#444", flexWrap: "wrap" }}>
           {[{ icon: "📧", text: "hello@supplyping.com" }, { icon: "📞", text: "313-591-3484" }, { icon: "🌐", text: "supplyping.com" }, { icon: "📍", text: "Metro Detroit, MI" }].map(t => (
             <span key={t.text} style={{ display: "flex", alignItems: "center", gap: 6 }}>{t.icon} {t.text}</span>
           ))}
         </div>
         <div id="sms-terms" style={{ maxWidth: 720, margin: "32px auto 0", paddingTop: 24, borderTop: "1px solid #1c1c1c", fontSize: 11, color: "#555", lineHeight: 1.7, textAlign: "left" }}>
           <div style={{ fontWeight: 700, color: "#777", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>SMS Alerts — Terms &amp; Consent</div>
-          <p style={{ margin: "0 0 8px" }}>
-            SupplyPing sends SMS text alerts to facility operators and cleaning teams who opt in during account setup. By providing a mobile number and checking the consent box, you agree to receive recurring facility-alert text messages from SupplyPing. Message frequency varies based on facility activity. Message and data rates may apply.
-          </p>
-          <p style={{ margin: "0 0 8px" }}>
-            Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at hello@supplyping.com or 313-591-3484. Consent to receive SMS is not a condition of purchase.
-          </p>
-          <p style={{ margin: 0 }}>
-            We do not sell or share mobile information with third parties for marketing. See our Privacy Policy and Terms of Service for details. © 2026 SupplyPing, Metro Detroit, MI.
-          </p>
+          <p style={{ margin: "0 0 8px" }}>SupplyPing sends SMS text alerts to facility operators and cleaning teams who opt in during account setup. By providing a mobile number and checking the consent box, you agree to receive recurring facility-alert text messages from SupplyPing. Message frequency varies based on facility activity. Message and data rates may apply.</p>
+          <p style={{ margin: "0 0 8px" }}>Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at hello@supplyping.com or 313-591-3484. Consent to receive SMS is not a condition of purchase.</p>
+          <p style={{ margin: 0 }}>We do not sell or share mobile information with third parties for marketing. © 2026 SupplyPing, Metro Detroit, MI.</p>
         </div>
       </div>
     </div>
@@ -723,10 +654,10 @@ export default function App() {
           <Input label="Password (min 6 characters)" value={password} onChange={setPassword} placeholder="Create a strong password" type="password" />
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10, fontWeight: 500 }}>Your Industry</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 300, overflowY: "auto" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 280, overflowY: "auto" }}>
               {INDUSTRIES.map(i => (
                 <button key={i.id} onClick={() => setIndustry(i.id)}
-                  style={{ background: industry === i.id ? T.ink : T.cream, color: industry === i.id ? T.white : T.ink, border: `1.5px solid ${industry === i.id ? T.ink : T.border}`, borderRadius: 10, padding: "10px 12px", fontFamily: font.body, fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left", transition: "all 0.15s" }}>
+                  style={{ background: industry === i.id ? T.ink : T.cream, color: industry === i.id ? T.white : T.ink, border: `1.5px solid ${industry === i.id ? T.ink : T.border}`, borderRadius: 10, padding: "10px 12px", fontFamily: font.body, fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left" }}>
                   {i.emoji} {i.label}
                 </button>
               ))}
@@ -743,10 +674,10 @@ export default function App() {
             try {
               await fetch("https://api.web3forms.com/submit", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ access_key: "7f502c28-1de9-4159-807c-773d5f4d5cbb", subject: `🎉 New SupplyPing Signup — ${bizName}`, "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Plan": "Free Trial" })
+                body: JSON.stringify({ access_key: WEB3FORMS_KEY, subject: `🎉 New SupplyPing Signup — ${bizName}`, "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Plan": "Free Trial" })
               });
-            } catch(e) {}
-            setScreen("onboard"); setStep(1);
+            } catch (e) {}
+            setScreen("onboard"); setStep(1); window.scrollTo(0, 0);
           }} disabled={!bizName || !email || !password || !industry || authLoading} variant="primary" full />
           <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: T.muted }}>
             Already have an account? <span onClick={() => nav("login")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>Log in</span>
@@ -778,7 +709,6 @@ export default function App() {
             setAuthError(""); setAuthLoading(true);
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) { setAuthLoading(false); setAuthError("Invalid email or password. Please try again."); return; }
-            // Rehydrate this client's saved profile + locations from Airtable
             const profile = await loadClientData(email);
             if (profile) {
               if (profile.bizName) setBizName(profile.bizName);
@@ -803,7 +733,7 @@ export default function App() {
     <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
       <style>{`* { box-sizing: border-box; }`}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
-      <div style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "20px 48px" }}>
+      <div style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "20px 24px" }}>
         <div style={{ maxWidth: 620, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -823,12 +753,11 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 620, margin: "0 auto", padding: "52px 40px" }}>
-
+      <div style={{ maxWidth: 620, margin: "0 auto", padding: "44px 24px" }}>
         {step === 1 && (
           <>
             <div style={{ fontSize: 44, marginBottom: 16 }}>🏢</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Tell us about your facility</h2>
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>Tell us about your facility</h2>
             <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 28 }}>We'll use this to create your unique QR codes and dashboard.</p>
             <Input label="Facility / Location Name" value={location} onChange={setLocation} placeholder="Building A — Romulus, MI" />
             <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 12, padding: "12px 16px", marginBottom: 24, fontSize: 13, color: T.green, fontWeight: 500 }}>
@@ -840,21 +769,30 @@ export default function App() {
 
         {step === 2 && (
           <>
-            <div style={{ fontSize: 44, marginBottom: 16 }}>🚻</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Add your locations</h2>
+            <div style={{ fontSize: 44, marginBottom: 16 }}>📍</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>Add your locations</h2>
             <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>We'll generate a unique QR code for every unit/asset automatically.</p>
             {rooms.map((room, i) => (
-              <div key={i} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, marginBottom: 10, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center", boxShadow: T.shadow }}>
-                <input value={room.name} onChange={e => updateRoom(i, "name", e.target.value)} placeholder="e.g. Warehouse Floor or Breakroom"
-                  style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.cream, outline: "none", width: "100%" }} />
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: T.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Units/Assets:</span>
-                  <select value={room.stalls} onChange={e => updateRoom(i, "stalls", Number(e.target.value))}
-                    style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 8px", fontFamily: font.body, fontSize: 13, background: T.cream, color: T.ink, outline: "none" }}>
-                    {[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n}</option>)}
+              <div key={i} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, marginBottom: 10, boxShadow: T.shadow }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center" }}>
+                  <input value={room.name} onChange={e => updateRoom(i, "name", e.target.value)} placeholder="e.g. Warehouse Floor or Breakroom"
+                    style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.cream, outline: "none", width: "100%" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: T.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Units:</span>
+                    <select value={room.stalls} onChange={e => updateRoom(i, "stalls", Number(e.target.value))}
+                      style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 8px", fontFamily: font.body, fontSize: 13, background: T.cream, color: T.ink, outline: "none" }}>
+                      {[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  {rooms.length > 1 && <button onClick={() => removeRoom(i)} style={{ background: "transparent", border: "none", color: T.red, cursor: "pointer", fontSize: 16, padding: "4px" }}>✕</button>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <span style={{ fontSize: 11, color: T.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Area type:</span>
+                  <select value={room.category || "default"} onChange={e => updateRoom(i, "category", e.target.value)}
+                    style={{ flex: 1, border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px", fontFamily: font.body, fontSize: 12, background: T.cream, color: T.ink, outline: "none" }}>
+                    {AREA_TYPES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                   </select>
                 </div>
-                {rooms.length > 1 && <button onClick={() => removeRoom(i)} style={{ background: "transparent", border: "none", color: T.red, cursor: "pointer", fontSize: 16, padding: "4px" }}>✕</button>}
               </div>
             ))}
             <button onClick={addRoom} style={{ width: "100%", background: "transparent", border: `2px dashed ${T.border}`, borderRadius: 12, padding: "12px", fontFamily: font.body, fontSize: 13, color: T.muted, cursor: "pointer", marginBottom: 16 }}>
@@ -870,37 +808,28 @@ export default function App() {
         {step === 3 && (
           <>
             <div style={{ fontSize: 44, marginBottom: 16 }}>🔔</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Set up instant alerts</h2>
-            <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>Enter your cleaning team's contact info. They'll be notified instantly when a supply issue is reported.</p>
-            <Input label="Cleaning Team Email" value={alertEmail} onChange={setAlertEmail} placeholder="cleaning@yourbusiness.com" type="email" />
-            <Input label="Cleaning Team Phone (for SMS)" value={alertPhone} onChange={setAlertPhone} placeholder="+1 313 000 0000" />
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>Set up instant alerts</h2>
+            <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>Enter your team's contact info. They'll be notified instantly when an issue is reported.</p>
+            <Input label="Cleaning / Operations Team Email" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
+            <Input label="Team Phone (for SMS — optional)" value={alertPhone} onChange={setAlertPhone} placeholder="+1 313 000 0000" />
             <div style={{ background: T.cream, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
               <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-                <input type="checkbox" checked={smsConsent} onChange={e => setSmsConsent(e.target.checked)}
-                  style={{ marginTop: 3, width: 18, height: 18, accentColor: T.green, flexShrink: 0, cursor: "pointer" }} />
-                <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, fontFamily: font.body }}>
-                  By providing a phone number and checking this box, you agree to receive SMS text alerts from SupplyPing about facility supply issues at this number. Message frequency varies. Message &amp; data rates may apply. Reply <b>STOP</b> to unsubscribe or <b>HELP</b> for help. Consent is not a condition of purchase.
+                <input type="checkbox" checked={smsConsent} onChange={e => setSmsConsent(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18, accentColor: T.green, flexShrink: 0, cursor: "pointer" }} />
+                <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+                  By providing a phone number and checking this box, you agree to receive SMS text alerts from SupplyPing about facility issues at this number. Message frequency varies. Message &amp; data rates may apply. Reply <b>STOP</b> to unsubscribe or <b>HELP</b> for help. Consent is not a condition of purchase.
                 </span>
               </label>
             </div>
             <div style={{ marginBottom: 20 }}>
-              <Btn label={testSent ? "✅ Test Sent!" : "📤 Send Test Alert"} onClick={sendTestAlert} disabled={!alertEmail || testSent} variant="outline" size="sm" />
-              {testSent && <span style={{ marginLeft: 10, fontSize: 13, color: T.green }}>Check {alertEmail} for the test alert!</span>}
+              <Btn label={testSent ? "✅ Test Sent!" : "📤 Send Test Alert"} onClick={sendTestAlert} disabled={!alertEmail} variant="outline" size="sm" />
+              {testSent && <span style={{ marginLeft: 10, fontSize: 13, color: T.green }}>Check hello@supplyping.com!</span>}
             </div>
             <div style={{ background: T.yellowLight, border: `1px solid ${T.yellowBorder}`, borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: T.yellow, fontWeight: 500 }}>
-              ⚡ Every time a worker scans a QR code and reports an issue — your cleaning team is notified <b>instantly</b> via email.
+              ⚡ Every time a worker scans a QR code and reports an issue — an alert is sent <b>instantly</b>.
             </div>
             <Btn label="Generate My QR Codes →" onClick={async () => {
-              try {
-                const searchRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`, { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } });
-                const searchData = await searchRes.json();
-                const fields = { "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Cleaning Team Email": alertEmail, "Phone Number": alertPhone, "Facility Name": location, "Plan": "Trial", "Client Status": "Trial", "Locations": JSON.stringify(rooms) };
-                if (searchData.records && searchData.records.length > 0) {
-                  await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${searchData.records[0].id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
-                } else {
-                  await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients`, { method: "POST", headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
-                }
-              } catch(e) {}
+              const fields = { "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Cleaning Team Email": alertEmail, "Phone Number": alertPhone, "Facility Name": location, "Plan": "Trial", "Client Status": "Trial", "Locations": JSON.stringify(rooms) };
+              await saveLocationsToAirtable(email, rooms, fields);
               setStep(4);
             }} disabled={!alertEmail} variant="primary" full />
           </>
@@ -909,7 +838,7 @@ export default function App() {
         {step === 4 && (
           <>
             <div style={{ fontSize: 44, marginBottom: 16 }}>🎉</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 8px" }}>Your QR codes are ready!</h2>
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>Your QR codes are ready!</h2>
             <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>{totalQRs} unique QR codes for {location}. Print, laminate, and post at each unit/asset.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
               {rooms.flatMap((room, ri) =>
@@ -936,7 +865,7 @@ export default function App() {
             </div>
             <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 12, padding: 18, marginBottom: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.green, marginBottom: 10 }}>🖨️ How to install</div>
-              {["Print on card stock — 4×4 inches is perfect", "Laminate or cover with clear packing tape", "Post at each unit/asset at eye level", "Test each QR with your phone before leaving", "Workers scan → cleaning team gets email alert instantly"].map((s, i) => (
+              {["Print on card stock — 4×4 inches is perfect", "Laminate or cover with clear packing tape", "Post at each unit/asset at eye level", "Test each QR with your phone before leaving", "Workers scan → your team gets an alert instantly"].map((s, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 13, color: T.green }}>
                   <span style={{ fontWeight: 700 }}>{i+1}.</span><span>{s}</span>
                 </div>
@@ -954,23 +883,23 @@ export default function App() {
     <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
       <style>{`* { box-sizing: border-box; }`}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
-      <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
           <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>SupplyPing Dashboard</div>
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Btn label="🚻 Status Board" onClick={() => nav("status")} variant="outline" size="sm" />
-          <Btn label="🚿 Manage Locations" onClick={() => nav("manage")} variant="outline" size="sm" />
-          <Btn label={loadingReports ? "⏳ Loading..." : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports().then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 0" }}>
+          <Btn label="🚻 Status" onClick={() => nav("status")} variant="outline" size="sm" />
+          <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
+          <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports().then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
             setLocation(""); setAlertEmail(""); setAlertPhone("");
-            setRooms([{ name: "Warehouse Floor", stalls: 2 }, { name: "Breakroom", stalls: 1 }]);
+            setRooms([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Breakroom", stalls: 1, category: "breakroom" }]);
             showToast("👋 Logged out successfully!", T.green);
             nav("landing");
           }} variant="outline" size="sm" />
@@ -978,7 +907,6 @@ export default function App() {
       </header>
 
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 24px" }}>
-        {/* Status Banner */}
         <div style={{ background: open.length === 0 ? T.greenLight : T.redLight, border: `2px solid ${open.length === 0 ? T.greenBorder : T.redBorder}`, borderRadius: 18, padding: "24px 28px", marginBottom: 24, display: "flex", alignItems: "center", gap: 20, boxShadow: T.shadow }}>
           <div style={{ fontSize: 44 }}>{open.length === 0 ? "✅" : "🚨"}</div>
           <div>
@@ -986,16 +914,15 @@ export default function App() {
               {open.length === 0 ? "All Locations Fully Stocked!" : `${open.length} Active Issue${open.length > 1 ? "s" : ""} Need Attention`}
             </div>
             <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
-              {open.length === 0 ? "No action needed right now." : "Cleaning team has been notified. Tap ✓ Fixed It when resolved."}
+              {open.length === 0 ? "No action needed right now." : "Your team has been notified. Tap ✓ Fixed It when resolved."}
             </div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: 28 }}>
           {[
             { label: "Open Issues", val: open.length, color: open.length > 0 ? T.red : T.green },
-            { label: "Resolved Today", val: resolved.length, color: T.green },
+            { label: "Resolved", val: resolved.length, color: T.green },
             { label: "Total Reports", val: alerts.length, color: T.blue },
             { label: "Auto-Refresh", val: "30s", color: T.orange },
           ].map(s => (
@@ -1006,16 +933,12 @@ export default function App() {
           ))}
         </div>
 
-        {/* Active Alerts */}
         <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>
-          Active Issues
-          <span style={{ marginLeft: 8, fontSize: 10, color: T.orange, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>Live from Airtable · auto-refreshes every 30s</span>
+          Active Issues <span style={{ marginLeft: 8, fontSize: 10, color: T.orange, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>Live · auto-refreshes every 30s</span>
         </div>
 
         {loadingReports ? (
-          <Card style={{ padding: 28, textAlign: "center" }}>
-            <div style={{ color: T.blue, fontSize: 14 }}>⏳ Loading live reports from Airtable...</div>
-          </Card>
+          <Card style={{ padding: 28, textAlign: "center" }}><div style={{ color: T.blue, fontSize: 14 }}>⏳ Loading live reports...</div></Card>
         ) : open.length === 0 ? (
           <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 14, padding: 28, textAlign: "center", color: T.green, fontSize: 14, fontWeight: 500 }}>
             🎉 All clear — every location is fully stocked!
@@ -1023,11 +946,11 @@ export default function App() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
             {open.map(a => (
-              <div key={a.id} style={{ background: a.supply.bg, border: `1.5px solid ${a.supply.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: T.shadow }}>
+              <div key={a.id} style={{ background: a.supply.bg, border: `1.5px solid ${a.supply.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: T.shadow, gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                   <div style={{ fontSize: 32 }}>{a.supply.emoji}</div>
                   <div>
-                    <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{a.supply.label}</div>
+                    <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{a.status || a.supply.label}</div>
                     <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>{a.room} · {a.stall}{a.location ? ` · ${a.location}` : ""} · {a.time}</div>
                     {a.cleaningEmail && <div style={{ fontSize: 11, color: T.green, marginTop: 2 }}>✅ Alert sent to {a.cleaningEmail}</div>}
                   </div>
@@ -1038,14 +961,13 @@ export default function App() {
           </div>
         )}
 
-        {/* Resolved */}
         {resolved.length > 0 && (
           <>
             <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 12 }}>Resolved</div>
             {resolved.map(a => (
               <div key={a.id} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, opacity: 0.55 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, color: T.muted }}>
-                  <span>✅</span><span>{a.supply.label} · {a.room}</span>
+                  <span>✅</span><span>{a.status || a.supply.label} · {a.room}</span>
                 </div>
                 <span style={{ fontSize: 11, color: T.green, fontWeight: 600 }}>RESOLVED</span>
               </div>
@@ -1056,20 +978,20 @@ export default function App() {
     </div>
   );
 
-  // ── MANAGE BATHROOMS ──
+  // ── MANAGE LOCATIONS ──
   if (screen === "manage") return (
     <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
       <style>{`* { box-sizing: border-box; }`}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
-      <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, boxShadow: T.shadow }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
           <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Manage Locations</div>
-            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Your Facility"}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, padding: "12px 0" }}>
           <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
@@ -1080,15 +1002,13 @@ export default function App() {
         </div>
       </header>
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
-
-        {/* Add New */}
         <Card style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 14 }}>+ Add New Location</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", marginBottom: 12 }}>
             <input placeholder="e.g. Warehouse Floor or Breakroom" id="newRoomInput"
               style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.cream, outline: "none" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, color: T.muted, fontWeight: 500 }}>Units/Assets:</span>
+              <span style={{ fontSize: 12, color: T.muted, fontWeight: 500 }}>Units:</span>
               <select id="newStallCount" style={{ border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "12px 8px", fontFamily: font.body, fontSize: 13, background: T.cream, color: T.ink, outline: "none" }}>
                 {[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -1100,9 +1020,6 @@ export default function App() {
               {AREA_TYPES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
             </select>
           </div>
-          <div style={{ fontSize: 11, color: T.muted, marginBottom: 14, lineHeight: 1.5 }}>
-            The area type sets which report options appear when this location's QR code is scanned. "All Categories" shows the full checklist.
-          </div>
           <Btn label="Add Location & Generate QR Codes →" onClick={() => {
             const name = document.getElementById("newRoomInput").value;
             const stalls = Number(document.getElementById("newStallCount").value);
@@ -1112,11 +1029,10 @@ export default function App() {
             setRooms(updated);
             saveLocationsToAirtable(email, updated, { "Facility Name": location, "Cleaning Team Email": alertEmail });
             document.getElementById("newRoomInput").value = "";
-            showToast("✅ Location added & saved! QR codes generated below.", T.green);
+            showToast("✅ Location added & saved!", T.green);
           }} variant="orange" />
         </Card>
 
-        {/* Existing Bathrooms */}
         <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 16 }}>
           {rooms.length} Location{rooms.length > 1 ? "s" : ""} · {totalQRs} QR Code{totalQRs > 1 ? "s" : ""}
         </div>
@@ -1168,50 +1084,40 @@ export default function App() {
     </div>
   );
 
-  // ── REPORT (QR Scan) ──
+  // ── REPORT (QR Scan target) ──
   if (screen === "report") return (
     <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
       <style>{`* { box-sizing: border-box; }`}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
-      <div style={{ maxWidth: 440, margin: "0 auto", padding: "52px 24px" }}>
+      <div style={{ maxWidth: 440, margin: "0 auto", padding: "44px 20px" }}>
         {!reportDone ? (
           <>
-            <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ width: 56, height: 56, background: T.ink, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 16px" }}>🚻</div>
-              <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Facility Operations Platform</div>
+              <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Facility Operations</div>
               <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>Report a Facility Issue</h2>
-              <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select the issue category. Takes 10 seconds.</p>
+              <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select the issue(s). Takes 10 seconds.</p>
               {(qrRoom || qrLocation) && (
                 <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, display: "inline-block", marginTop: 6 }}>
                   📍 {[qrLocation, qrRoom, qrStall ? `Unit/Asset ${qrStall}` : ""].filter(Boolean).join(" · ")}
                 </div>
               )}
-              {!qrLocation && !qrRoom && (
-                <div style={{ marginTop: 12 }}>
-                  <input
-                    placeholder="Enter your location (e.g. Building A, Floor 2)"
-                    value={qrLocation}
-                    onChange={e => setQrLocation(e.target.value)}
-                    style={{ width: "100%", border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.cream, outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
-              )}
             </div>
+
             <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, textAlign: "center", marginBottom: 16 }}>
               ✓ Select one or more issues, then tap Send
             </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
               {getReportCategories(qrCategory).map(cat => (
                 <div key={cat.id}>
-                  <div style={{ fontSize: 11, color: cat.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, fontFamily: font.body, padding: "4px 0" }}>
-                    {cat.label}
-                  </div>
+                  <div style={{ fontSize: 11, color: cat.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>{cat.label}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {cat.items.map(s => {
                       const sel = reportIssues.includes(s.id);
                       return (
                         <button key={s.id} onClick={() => setReportIssues(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])}
-                          style={{ background: sel ? T.ink : T.white, border: `2px solid ${sel ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: T.shadow, transition: "all 0.15s" }}>
+                          style={{ background: sel ? T.ink : T.white, border: `2px solid ${sel ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: T.shadow }}>
                           <span style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${sel ? T.white : T.dim}`, background: sel ? T.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, color: T.white }}>{sel ? "✓" : ""}</span>
                           <span style={{ fontSize: 22 }}>{s.emoji}</span>
                           <span style={{ fontSize: 14, fontWeight: 600, color: sel ? T.white : T.ink }}>{s.label}</span>
@@ -1222,17 +1128,10 @@ export default function App() {
                 </div>
               ))}
 
-              {/* OTHER — custom issue */}
               <div>
-                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, fontFamily: font.body, padding: "4px 0" }}>
-                  ✏️ Other / Custom Issue
-                </div>
-                <input
-                  value={otherText}
-                  onChange={e => setOtherText(e.target.value)}
-                  placeholder="Describe any other issue here..."
-                  style={{ width: "100%", border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }}
-                />
+                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>✏️ Other / Custom Issue</div>
+                <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder="Describe any other issue here..."
+                  style={{ width: "100%", border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }} />
               </div>
             </div>
 
@@ -1247,56 +1146,42 @@ export default function App() {
               if (otherText.trim()) selectedLabels.push(`Other: ${otherText.trim()}`);
               if (selectedLabels.length === 0) return;
               const issueString = selectedLabels.join(", ");
-              const cleaningEmail = alertEmail || new URLSearchParams(window.location.search).get("ce") || "";
-              const locName = qrLocation || new URLSearchParams(window.location.search).get("l") || "Unknown Location";
-              const roomName = qrRoom || new URLSearchParams(window.location.search).get("r") || "Unknown Room";
-              const stallNum = qrStall || new URLSearchParams(window.location.search).get("s") || "1";
-              const biz = qrBusiness || new URLSearchParams(window.location.search).get("b") || "SupplyPing";
+              const p = new URLSearchParams(window.location.search);
+              const cleaningEmail = alertEmail || p.get("ce") || "";
+              const locName = qrLocation || p.get("l") || "Unknown Location";
+              const roomName = qrRoom || p.get("r") || "Unknown Room";
+              const stallNum = qrStall || p.get("s") || "1";
+              const biz = qrBusiness || p.get("b") || "SupplyPing";
 
-              // Submit to Airtable
-              try {
-                await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
-                  method: "POST",
-                  headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ fields: {
-                    "Location": locName,
-                    "Room": roomName,
-                    "Stall": `Stall ${stallNum}`,
-                    "Status": issueString,
-                    "Cleaning Team Email": cleaningEmail,
-                    "Reported At": new Date().toISOString(),
-                    "Resolved": false
-                  }})
-                });
-              } catch(e) { console.log("Airtable error:", e); }
+              // 1) Airtable sync
+              await submitReportToAirtable({
+                "Location": locName,
+                "Room": roomName,
+                "Stall": `Stall ${stallNum}`,
+                "Status": issueString,
+                "Cleaning Team Email": cleaningEmail,
+                "Reported At": new Date().toISOString(),
+                "Resolved": false
+              });
 
-              // Build recipient list: cleaning team + management (always notified)
-              const recipients = [];
-              if (cleaningEmail) recipients.push(cleaningEmail);
-              recipients.push(MANAGEMENT_EMAIL);
-              const toField = recipients.join(", ");
-
-              // Send email alert — or queue it offline for auto-sync later.
-              // Matches template variables: cleaning_email, to_email, email
+              // 2) Formspree alert (or offline queue)
               const result = await sendOrQueueAlert({
-                cleaning_email: toField,
-                to_email: toField,
-                email: toField,
+                _subject: `🚨 SupplyPing Alert — ${issueString} @ ${locName}`,
                 issue: issueString,
                 location: locName,
                 room: roomName,
-                stall: `Stall ${stallNum}`,
+                unit_asset: `Unit/Asset ${stallNum}`,
                 business: biz,
+                cleaning_email: cleaningEmail,
+                management_email: MANAGEMENT_EMAIL,
                 time: new Date().toLocaleString(),
               });
 
-              if (result === "sent") {
-                showToast("✅ Report sent! Team notified.", T.green);
-              } else if (result === "queued") {
-                showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
-              }
+              if (result === "sent") showToast("✅ Report sent! Team notified.", T.green);
+              else showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
               setReportDone(true);
             }} disabled={reportIssues.length === 0 && !otherText.trim()} variant="primary" full size="lg" />
+
             <div style={{ textAlign: "center", marginTop: 16 }}>
               <span onClick={() => nav("landing")} style={{ fontSize: 12, color: T.muted, cursor: "pointer" }}>← supplyping.com</span>
             </div>
@@ -1305,7 +1190,7 @@ export default function App() {
           <div style={{ textAlign: "center", padding: "48px 0" }}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>Report Sent!</h2>
-            <p style={{ color: T.muted, fontSize: 15 }}>The cleaning team has been notified and is on their way.</p>
+            <p style={{ color: T.muted, fontSize: 15 }}>The team has been notified and is on the way.</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
               <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
@@ -1321,7 +1206,7 @@ export default function App() {
     <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
       <style>{`* { box-sizing: border-box; }`}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
-      <div style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "20px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h2 style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, margin: "0 0 4px" }}>Live Location Status</h2>
           <p style={{ fontSize: 13, color: T.muted, margin: 0 }}>SupplyPing Facility Operations — Updates automatically</p>
@@ -1334,7 +1219,7 @@ export default function App() {
             🎉 All locations are fully stocked — nothing to report!
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
             {[...new Set(alerts.map(a => a.room))].map((roomName, i) => {
               const roomAlerts = alerts.filter(a => a.room === roomName && !a.resolved);
               const isCleaning = roomAlerts.some(a => a.supply.id === "cleaning");
@@ -1343,7 +1228,7 @@ export default function App() {
               const cfg = {
                 open: { label: "OPEN", color: T.green, bg: T.greenLight, border: T.greenBorder, emoji: "✅", desc: "All supplies available" },
                 cleaning: { label: "CLEANING", color: T.purple, bg: T.purpleLight, border: T.purpleBorder, emoji: "🚫", desc: "Being cleaned — check back soon" },
-                issues: { label: "NEEDS ATTENTION", color: T.red, bg: T.redLight, border: T.redBorder, emoji: "⚠️", desc: roomAlerts.map(a => a.supply.label).join(", ") },
+                issues: { label: "NEEDS ATTENTION", color: T.red, bg: T.redLight, border: T.redBorder, emoji: "⚠️", desc: roomAlerts.map(a => a.status || a.supply.label).join(", ") },
               }[status];
               return (
                 <div key={i} style={{ background: cfg.bg, border: `2px solid ${cfg.border}`, borderRadius: 16, padding: 22, boxShadow: T.shadow }}>
@@ -1359,7 +1244,7 @@ export default function App() {
           </div>
         )}
         <div style={{ marginTop: 20, background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 18px", textAlign: "center", fontSize: 13, color: T.muted, boxShadow: T.shadow }}>
-          📺 Display this screen on break room monitors so associates know before they walk over
+          📺 Display this screen on break room monitors so staff know before they walk over
         </div>
       </div>
     </div>
