@@ -117,50 +117,51 @@ const INDUSTRIES = [
   { id: "other", emoji: "➕", label: "Others" },
 ];
 
-// ── REPORT CATEGORIES ──
+// ── REPORT CATEGORIES (safety-forward; Safety is the flagship) ──
 const SUPPLY_CATEGORIES = [
   {
-    id: "restroom", label: "🚻 Restroom Supplies", color: T.blue, bg: T.blueLight, border: T.blueBorder,
+    id: "safety", label: "⚠️ Safety & Hazards", color: T.red, bg: T.redLight, border: T.redBorder,
+    items: [
+      { id: "spill", emoji: "💧", label: "Wet Floor / Spill" },
+      { id: "blocked", emoji: "🚪", label: "Blocked Exit / Aisle" },
+      { id: "hazard", emoji: "⚠️", label: "Trip / Fall Hazard" },
+      { id: "nearmiss", emoji: "❗", label: "Near-Miss / Incident" },
+      { id: "ppe", emoji: "🦺", label: "PPE / Equipment Unsafe" },
+    ]
+  },
+  {
+    id: "security", label: "🔒 Security & Facilities", color: T.purple, bg: T.purpleLight, border: T.purpleBorder,
+    items: [
+      { id: "access", emoji: "🚷", label: "Access / Door Issue" },
+      { id: "damage", emoji: "🧱", label: "Property Damage" },
+      { id: "suspicious", emoji: "👁️", label: "Suspicious Activity" },
+    ]
+  },
+  {
+    id: "maint", label: "🔧 Maintenance & Repairs", color: T.yellow, bg: T.yellowLight, border: T.yellowBorder,
+    items: [
+      { id: "lights", emoji: "💡", label: "Lighting Out / Flickering" },
+      { id: "hvac", emoji: "🌡️", label: "HVAC / Temperature Issue" },
+      { id: "fixture", emoji: "🔧", label: "Broken Fixture / Door" },
+      { id: "equipment", emoji: "🛠️", label: "Equipment Issue" },
+    ]
+  },
+  {
+    id: "clean", label: "🧹 Cleaning & Sanitation", color: T.green, bg: T.greenLight, border: T.greenBorder,
+    items: [
+      { id: "spillclean", emoji: "🧹", label: "Spill / Mess Needs Cleanup" },
+      { id: "restroomclean", emoji: "🚻", label: "Restroom Needs Attention" },
+      { id: "trash", emoji: "🗑️", label: "Trash / Bins Full" },
+    ]
+  },
+  {
+    id: "supply", label: "🧻 Supplies", color: T.blue, bg: T.blueLight, border: T.blueBorder,
     items: [
       { id: "soap", emoji: "🧼", label: "No Soap" },
       { id: "towels", emoji: "🖐️", label: "No Paper Towels" },
       { id: "tp", emoji: "🧻", label: "No Toilet Paper" },
-      { id: "pads", emoji: "🌸", label: "No Feminine Products" },
       { id: "sanitizer", emoji: "🧴", label: "No Hand Sanitizer" },
-      { id: "cleaning", emoji: "🚫", label: "Cleaning Needed" },
-    ]
-  },
-  {
-    id: "breakroom", label: "☕ Breakroom & Kitchen", color: T.orange, bg: T.orangeLight, border: T.orangeBorder,
-    items: [
-      { id: "coffee", emoji: "☕", label: "Coffee Machine Down" },
-      { id: "water", emoji: "💧", label: "Water Dispenser Empty" },
-      { id: "fridge", emoji: "❄️", label: "Fridge Issue" },
-      { id: "utensils", emoji: "🍴", label: "Utensils Needed" },
-    ]
-  },
-  {
-    id: "conference", label: "📽️ Conference & Meeting Rooms", color: T.purple, bg: T.purpleLight, border: T.purpleBorder,
-    items: [
-      { id: "av", emoji: "📽️", label: "AV / Projector Failure" },
-      { id: "cables", emoji: "🔌", label: "Missing Cables" },
-      { id: "whiteboard", emoji: "🖊️", label: "Whiteboard Supplies Needed" },
-    ]
-  },
-  {
-    id: "office", label: "🖨️ Office & Printing Supplies", color: T.yellow, bg: T.yellowLight, border: T.yellowBorder,
-    items: [
-      { id: "paperjam", emoji: "🖨️", label: "Printer Paper Jam" },
-      { id: "toner", emoji: "🖋️", label: "Ink / Toner Low" },
-      { id: "stationery", emoji: "📎", label: "General Stationery Needed" },
-    ]
-  },
-  {
-    id: "safety", label: "⚠️ Safety & Maintenance", color: T.red, bg: T.redLight, border: T.redBorder,
-    items: [
-      { id: "spill", emoji: "⚠️", label: "Spill / Hazard" },
-      { id: "lights", emoji: "💡", label: "Flickering Lights" },
-      { id: "hvac", emoji: "🌡️", label: "HVAC / Temperature Issue" },
+      { id: "breakroom", emoji: "☕", label: "Breakroom Restock" },
     ]
   },
 ];
@@ -173,30 +174,33 @@ const WAREHOUSE_CATEGORIES = [
   {
     id: "warehouse", label: "🏭 Warehouse Issues", color: T.red, bg: T.redLight, border: T.redBorder,
     items: [
-      { id: "spill", emoji: "⚠️", label: "Spill / Hazard" },
+      { id: "spill", emoji: "💧", label: "Wet Floor / Spill" },
+      { id: "blocked", emoji: "🚪", label: "Blocked Exit / Aisle" },
+      { id: "hazard", emoji: "⚠️", label: "Trip / Fall Hazard" },
       { id: "tape", emoji: "🏷️", label: "Tape / Labels Low" },
       { id: "equipment", emoji: "🛠️", label: "Equipment Issue" },
     ]
   },
 ];
 
-const RESTROOM_CATEGORIES = [SUPPLY_CATEGORIES[0]];
+const RESTROOM_CATEGORIES = [SUPPLY_CATEGORIES.find(c => c.id === "supply")];
 const ALL_ITEMS = [...SUPPLY_CATEGORIES, ...WAREHOUSE_CATEGORIES].flatMap(c => c.items);
 
 function getReportCategories(assetType) {
   switch ((assetType || "").toLowerCase()) {
     case "warehouse": return WAREHOUSE_CATEGORIES;
-    case "restroom": return RESTROOM_CATEGORIES;
-    case "breakroom": return [SUPPLY_CATEGORIES.find(c => c.id === "breakroom")];
+    case "safety": return [SUPPLY_CATEGORIES.find(c => c.id === "safety")];
+    case "restroom":
+    case "supply": return RESTROOM_CATEGORIES;
     default: return SUPPLY_CATEGORIES;
   }
 }
 
 const AREA_TYPES = [
   { id: "default", label: "All Categories (default)" },
-  { id: "restroom", label: "🚻 Restroom" },
-  { id: "warehouse", label: "🏭 Warehouse" },
-  { id: "breakroom", label: "☕ Breakroom" },
+  { id: "safety", label: "⚠️ Safety Zone" },
+  { id: "warehouse", label: "🏭 Warehouse Floor" },
+  { id: "supply", label: "🧻 Restroom / Supplies" },
 ];
 
 const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal, categoryVal) => {
@@ -390,7 +394,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [location, setLocation] = useState("");
-  const [rooms, setRooms] = useState([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Breakroom", stalls: 1, category: "breakroom" }]);
+  const [rooms, setRooms] = useState([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Loading Dock", stalls: 1, category: "safety" }]);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertPhone, setAlertPhone] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
@@ -500,7 +504,7 @@ export default function App() {
           <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🚻</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>SupplyPing</div>
-            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase" }}>FACILITY OPERATIONS PLATFORM</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase" }}>FACILITY SAFETY & OPERATIONS</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -512,16 +516,16 @@ export default function App() {
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 64px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
-          Free 30-Day Pilot — Metro Detroit Businesses & Facilities
+          Free 30-Day Pilot — Built for Warehouses & High-Traffic Facilities
         </div>
         <h1 style={{ fontFamily: font.display, fontSize: 56, fontWeight: 700, margin: "0 0 24px", letterSpacing: -2.5, lineHeight: 1.05 }}>
-          Know Before<br />You Go <span style={{ color: T.orange }}>🚻</span>
+          See it. Scan it.<br />Solve it. <span style={{ color: T.orange }}>⚠️</span>
         </h1>
         <p style={{ fontSize: 18, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
-          Real-time workplace supply & facility alerts for offices, warehouses, retail, and campuses. From restroom supplies to equipment failures — covered.
+          Real-time facility reporting for warehouses, plants, and campuses. Workers scan a QR code to flag a safety hazard, maintenance issue, cleaning need, or supply shortage — and the right team is notified instantly, with a timestamp.
         </p>
         <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 36px", lineHeight: 1.6 }}>
-          Workers scan a QR code → tap the issue → the right team is notified instantly. Set up in 10 minutes.
+          Lead with safety. Cover everything else in the same scan. Set up in 10 minutes — no app, no IT team.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="primary" size="lg" />
@@ -899,7 +903,7 @@ export default function App() {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
             setLocation(""); setAlertEmail(""); setAlertPhone("");
-            setRooms([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Breakroom", stalls: 1, category: "breakroom" }]);
+            setRooms([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Loading Dock", stalls: 1, category: "safety" }]);
             showToast("👋 Logged out successfully!", T.green);
             nav("landing");
           }} variant="outline" size="sm" />
