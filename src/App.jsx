@@ -501,7 +501,7 @@ export default function App() {
 
       <nav style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🚻</div>
+          <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📋</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>SupplyPing</div>
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 2, textTransform: "uppercase" }}>FACILITY SAFETY & OPERATIONS</div>
@@ -646,7 +646,7 @@ export default function App() {
       {toast && <Toast msg={toast.msg} color={toast.color} />}
       <div style={{ width: "100%", maxWidth: 480 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 32, cursor: "pointer" }} onClick={() => nav("landing")}>
-          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
           <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>SupplyPing</span>
           <span style={{ color: T.muted, fontSize: 12 }}>← Back</span>
         </div>
@@ -698,7 +698,7 @@ export default function App() {
       {toast && <Toast msg={toast.msg} color={toast.color} />}
       <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 32, cursor: "pointer" }} onClick={() => nav("landing")}>
-          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
           <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>SupplyPing</span>
           <span style={{ color: T.muted, fontSize: 12 }}>← Back</span>
         </div>
@@ -741,7 +741,7 @@ export default function App() {
         <div style={{ maxWidth: 620, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 28, height: 28, background: T.ink, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🚻</div>
+              <div style={{ width: 28, height: 28, background: T.ink, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>📋</div>
               <span style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>SupplyPing Setup</span>
             </div>
             <span style={{ fontSize: 12, color: T.muted, fontWeight: 500 }}>Step {step} of 4</span>
@@ -889,14 +889,14 @@ export default function App() {
       {toast && <Toast msg={toast.msg} color={toast.color} />}
       <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
-          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>SupplyPing Dashboard</div>
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 0" }}>
-          <Btn label="🚻 Status" onClick={() => nav("status")} variant="outline" size="sm" />
+          <Btn label="📋 Status" onClick={() => nav("status")} variant="outline" size="sm" />
           <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
           <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports().then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
@@ -989,7 +989,7 @@ export default function App() {
       {toast && <Toast msg={toast.msg} color={toast.color} />}
       <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
-          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🚻</div>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Manage Locations</div>
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Your Facility"}</div>
@@ -1097,7 +1097,7 @@ export default function App() {
         {!reportDone ? (
           <>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <div style={{ width: 56, height: 56, background: T.ink, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 16px" }}>🚻</div>
+              <div style={{ width: 56, height: 56, background: T.ink, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 16px" }}>📋</div>
               <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Facility Operations</div>
               <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>Report a Facility Issue</h2>
               <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select the issue(s). Takes 10 seconds.</p>
