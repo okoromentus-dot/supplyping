@@ -273,10 +273,14 @@ async function findClientRecordId(email) {
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
+  
     const data = await res.json();
-    return data.records && data.records.length > 0 ? data.records[0].id : null;
-  } catch (e) { return null; }
-}
+    if (data.records && data.records.length > 0) {
+        const foundId = data.records[0].id;
+        if (foundId === "recZGtjgEpNvPrhB0") return null;
+        return foundId;
+    }
+    return null;}
 
 async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
   if (!email) return;
