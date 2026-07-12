@@ -2,8 +2,14 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 
 // ── CONFIG ──
-const FORMSPREE_ENDPOINT = "https://formspree.io/f/mkoezyoe";
+import emailjs from "@emailjs/browser";
+const EMAILJS_SERVICE = "service_9f62cg2";
+const EMAILJS_TEMPLATE = "template_58s7r9h";
+const EMAILJS_PUBLIC_KEY = "WZ68pLc75xuy8hcHi";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
+
+// Initialize EmailJS once at startup
+try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
 
 const AIRTABLE_TOKEN = "patkVT1Wc5FP40iAq.f98ab9293b37172e41e3d7a1ce3b58ce2ebcdc1b2b55aeff15a5b47198194d77";
 const AIRTABLE_BASE = "appOkUWfKR5sb2Br4";
@@ -33,15 +39,12 @@ function queueReport(payload) {
   writeQueue(queue);
 }
 
-// The single sender — POSTs the alert to Formspree.
+// The single sender — sends the alert via EmailJS.
+// The payload's cleaning_email maps to the {{cleaning_email}} template variable
+// (also sent as to_email and email so the template's "To Email" matches
+// regardless of which variable name it uses).
 async function postToFormspree(payload) {
-  const res = await fetch(FORMSPREE_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`Formspree ${res.status}`);
-  return res;
+  return emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, payload);
 }
 
 // Sends an alert if online; queues it to localStorage if offline or on failure.
@@ -474,15 +477,16 @@ export default function App() {
 
   const sendTestAlert = async () => {
     if (!alertEmail) return;
+    const recipients = [alertEmail, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
     const payload = {
-      _subject: "🧪 SupplyPing Test Alert",
+      cleaning_email: recipients,
+      to_email: recipients,
+      email: recipients,
       issue: "🧻 No Toilet Paper (TEST ALERT)",
       location: location || "Test Location",
       room: "Test Room",
       stall: "Stall 1",
       business: bizName || "Your Business",
-      cleaning_email: alertEmail,
-      management_email: MANAGEMENT_EMAIL,
       time: new Date().toLocaleString(),
     };
     const result = await sendOrQueueAlert(payload);
@@ -1151,7 +1155,16 @@ export default function App() {
               if (selectedLabels.length === 0) return;
               const issueString = selectedLabels.join(", ");
               const p = new URLSearchParams(window.location.search);
-              const cleaningEmail = alertEmail || p.get("ce") || "";
+              // Recipient priority: QR-embedded cleaning email → onboarding value
+              // → logged-in Supabase manager's account email (fallback when a
+              // manager reports from their own session without a QR).
+              let cleaningEmail = alertEmail || p.get("ce") || "";
+              if (!cleaningEmail) {
+                try {
+                  const { data } = await supabase.auth.getUser();
+                  cleaningEmail = data?.user?.email || "";
+                } catch (e) {}
+              }
               const locName = qrLocation || p.get("l") || "Unknown Location";
               const roomName = qrRoom || p.get("r") || "Unknown Room";
               const stallNum = qrStall || p.get("s") || "1";
@@ -1168,16 +1181,19 @@ export default function App() {
                 "Resolved": false
               });
 
-              // 2) Formspree alert (or offline queue)
+              // 2) EmailJS alert (or offline queue).
+              // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
+              // management is always CC'd via the combined recipient list.
+              const recipients = [cleaningEmail, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
               const result = await sendOrQueueAlert({
-                _subject: `🚨 SupplyPing Alert — ${issueString} @ ${locName}`,
+                cleaning_email: recipients,
+                to_email: recipients,
+                email: recipients,
                 issue: issueString,
                 location: locName,
                 room: roomName,
-                unit_asset: `Unit/Asset ${stallNum}`,
+                stall: `Stall ${stallNum}`,
                 business: biz,
-                cleaning_email: cleaningEmail,
-                management_email: MANAGEMENT_EMAIL,
                 time: new Date().toLocaleString(),
               });
 
