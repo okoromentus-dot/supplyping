@@ -48,18 +48,20 @@ async function postToFormspree(payload) {
 }
 
 // Sends an alert if online; queues it to localStorage if offline or on failure.
-// Returns: "sent" | "queued"
+// Returns: { status: "sent" } | { status: "offline" } | { status: "failed", error }
 async function sendOrQueueAlert(payload) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     queueReport(payload);
-    return "queued";
+    return { status: "offline" };
   }
   try {
     await postToFormspree(payload);
-    return "sent";
+    return { status: "sent" };
   } catch (e) {
     queueReport(payload);
-    return "queued";
+    // Surface the real EmailJS rejection so it can be diagnosed
+    const msg = (e && (e.text || e.message)) ? (e.text || e.message) : JSON.stringify(e);
+    return { status: "failed", error: msg };
   }
 }
 
@@ -490,8 +492,9 @@ export default function App() {
       time: new Date().toLocaleString(),
     };
     const result = await sendOrQueueAlert(payload);
-    if (result === "sent") { setTestSent(true); showToast("✅ Test alert sent! Check your inbox.", T.green); }
-    else { showToast("📡 Saved offline — will send when back online.", T.yellow); }
+    if (result.status === "sent") { setTestSent(true); showToast("✅ Test alert sent! Check your inbox.", T.green); }
+    else if (result.status === "offline") { showToast("📡 Offline — saved, will send when back online.", T.yellow); }
+    else { showToast(`❌ Email rejected: ${result.error}`, T.red); }
   };
 
   // ── LANDING ──
@@ -1197,8 +1200,9 @@ export default function App() {
                 time: new Date().toLocaleString(),
               });
 
-              if (result === "sent") showToast("✅ Report sent! Team notified.", T.green);
-              else showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
+              if (result.status === "sent") showToast("✅ Report sent! Team notified.", T.green);
+              else if (result.status === "offline") showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
+              else showToast(`❌ Alert rejected: ${result.error} — report was saved to Airtable.`, T.red);
               setReportDone(true);
             }} disabled={reportIssues.length === 0 && !otherText.trim()} variant="primary" full size="lg" />
 
