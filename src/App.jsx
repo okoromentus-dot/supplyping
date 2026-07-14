@@ -5,7 +5,7 @@ import { supabase } from "./supabase.js";
 import emailjs from "@emailjs/browser";
 const EMAILJS_SERVICE = "service_9f62cg2";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
-const EMAILJS_PUBLIC_KEY = "WZ68pLc75xuy8hcHi";
+const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
 // Initialize EmailJS once at startup
