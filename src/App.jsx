@@ -3,7 +3,7 @@ import { supabase } from "./supabase.js";
 
 // ── CONFIG ──
 import emailjs from "@emailjs/browser";
-const EMAILJS_SERVICE = "service_9f62cg2";
+const EMAILJS_SERVICE = "service_np65zh6";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
 const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
@@ -415,6 +415,10 @@ export default function App() {
   const [qrRoom, setQrRoom] = useState("");
   const [qrStall, setQrStall] = useState("");
   const [qrCategory, setQrCategory] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [acctLoading, setAcctLoading] = useState(false);
 
   const showToast = (msg, color) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
   const totalQRs = rooms.reduce((s, r) => s + Number(r.stalls || 0), 0);
@@ -905,6 +909,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 0" }}>
           <Btn label="📋 Status" onClick={() => nav("status")} variant="outline" size="sm" />
           <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
+          <Btn label="⚙️ Account" onClick={() => nav("account")} variant="outline" size="sm" />
           <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports().then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
@@ -1270,6 +1275,68 @@ export default function App() {
         <div style={{ marginTop: 20, background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 18px", textAlign: "center", fontSize: 13, color: T.muted, boxShadow: T.shadow }}>
           📺 Display this screen on break room monitors so staff know before they walk over
         </div>
+      </div>
+    </div>
+  );
+
+  // ── ACCOUNT SETTINGS ──
+  if (screen === "account") return (
+    <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
+      <style>{`* { box-sizing: border-box; }`}</style>
+      {toast && <Toast msg={toast.msg} color={toast.color} />}
+      <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⚙️</div>
+          <div>
+            <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Account Settings</div>
+            <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{email || "Your Account"}</div>
+          </div>
+        </div>
+        <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
+      </header>
+
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "32px 24px" }}>
+        <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>Change Email</div>
+          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 16px", lineHeight: 1.5 }}>Your login email is <b>{email}</b>. Enter a new email below — you may need to confirm the change via a link sent to your inbox.</p>
+          <Input label="New Email" value={newEmail} onChange={setNewEmail} placeholder="new@yourbusiness.com" type="email" />
+          <Btn label={acctLoading ? "Updating..." : "Update Email →"} onClick={async () => {
+            if (!newEmail || !newEmail.includes("@")) { showToast("Please enter a valid email", T.red); return; }
+            setAcctLoading(true);
+            const { error } = await supabase.auth.updateUser({ email: newEmail });
+            if (error) { setAcctLoading(false); showToast(`❌ ${error.message}`, T.red); return; }
+            // Keep the Airtable client record in sync so locations still load
+            try {
+              const recordId = await findClientRecordId(email);
+              if (recordId) {
+                await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${recordId}`, {
+                  method: "PATCH",
+                  headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ fields: { "Email": newEmail } })
+                });
+              }
+            } catch (e) {}
+            setEmail(newEmail); setNewEmail(""); setAcctLoading(false);
+            showToast("✅ Email update requested — check your inbox to confirm.", T.green);
+          }} disabled={!newEmail || acctLoading} variant="primary" full />
+        </Card>
+
+        <Card>
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>Change Password</div>
+          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 16px", lineHeight: 1.5 }}>Minimum 6 characters. You'll stay logged in after changing it.</p>
+          <Input label="New Password" value={newPassword} onChange={setNewPassword} placeholder="New password" type="password" />
+          <Input label="Confirm New Password" value={confirmPassword} onChange={setConfirmPassword} placeholder="Type it again" type="password" />
+          <Btn label={acctLoading ? "Updating..." : "Update Password →"} onClick={async () => {
+            if (newPassword.length < 6) { showToast("Password must be at least 6 characters", T.red); return; }
+            if (newPassword !== confirmPassword) { showToast("Passwords don't match", T.red); return; }
+            setAcctLoading(true);
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            setAcctLoading(false);
+            if (error) { showToast(`❌ ${error.message}`, T.red); return; }
+            setNewPassword(""); setConfirmPassword("");
+            showToast("✅ Password updated!", T.green);
+          }} disabled={!newPassword || !confirmPassword || acctLoading} variant="primary" full />
+        </Card>
       </div>
     </div>
   );
