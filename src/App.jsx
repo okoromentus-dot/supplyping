@@ -419,6 +419,8 @@ export default function App() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acctLoading, setAcctLoading] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
 
   const showToast = (msg, color) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
   const totalQRs = rooms.reduce((s, r) => s + Number(r.stalls || 0), 0);
@@ -527,7 +529,7 @@ export default function App() {
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 64px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
-          Free 30-Day Pilot — Built for Warehouses & High-Traffic Facilities
+          Free 90-Day Pilot — Built for Warehouses & High-Traffic Facilities
         </div>
         <h1 style={{ fontFamily: font.display, fontSize: 56, fontWeight: 700, margin: "0 0 24px", letterSpacing: -2.5, lineHeight: 1.05 }}>
           See it. Scan it.<br />Solve it. <span style={{ color: T.orange }}>⚠️</span>
@@ -596,7 +598,10 @@ export default function App() {
         <div style={{ maxWidth: 880, margin: "0 auto", textAlign: "center" }}>
           <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 600 }}>Pricing</div>
           <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 8px", letterSpacing: -1.2 }}>Simple, honest pricing.</h2>
-          <p style={{ color: T.muted, fontSize: 15, marginBottom: 40 }}>Start free for 30 days. No credit card required.</p>
+          <p style={{ color: T.muted, fontSize: 15, marginBottom: 16 }}>No credit card required.</p>
+          <div style={{ background: T.greenLight, border: `1.5px solid ${T.greenBorder}`, borderRadius: 12, padding: "14px 20px", marginBottom: 36, fontSize: 14, color: T.green, fontWeight: 600, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>
+            🎉 Founding Pilot: every plan is <b>FREE for your first 90 days</b>. All we ask is your honest feedback.
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             {[
               { name: "Starter", price: "$49", mo: "/mo", features: ["1 facility", "Up to 10 locations", "Email alerts to operations staff", "Live dashboard", "QR code generator"], highlight: false },
@@ -627,7 +632,7 @@ export default function App() {
           Ready to streamline<br />your facility operations?
         </h2>
         <p style={{ color: "#888", fontSize: 16, marginBottom: 36, maxWidth: 480, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
-          Free for 30 days. Set up in 10 minutes. No credit card required.
+          Free for 90 days. Set up in 10 minutes. No credit card required.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="orange" size="lg" />
@@ -662,7 +667,7 @@ export default function App() {
           <span style={{ color: T.muted, fontSize: 12 }}>← Back</span>
         </div>
         <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Create your account</h2>
-        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 30-day trial. No credit card required.</p>
+        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 90-day pilot. No credit card required.</p>
         <Card>
           <Input label="Business Name" value={bizName} onChange={setBizName} placeholder="Evans Distribution" />
           <Input label="Work Email" value={email} onChange={setEmail} placeholder="you@yourbusiness.com" type="email" />
@@ -990,6 +995,36 @@ export default function App() {
             ))}
           </>
         )}
+
+        {/* FOUNDING PILOT FEEDBACK */}
+        <Card style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>💬 Founding Pilot Feedback</div>
+          <p style={{ fontSize: 13, color: T.muted, margin: "0 0 14px", lineHeight: 1.5 }}>
+            Your plan is free for 90 days — all we ask is your honest feedback. What's working? What's missing? What would make this a must-have?
+          </p>
+          {feedbackSent ? (
+            <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: T.green, fontWeight: 500 }}>
+              ✅ Thank you! Your feedback was sent — it directly shapes what we build next.
+            </div>
+          ) : (
+            <>
+              <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)}
+                placeholder="Tell us anything — features, bugs, ideas, complaints..."
+                rows={4}
+                style={{ width: "100%", border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.cream, outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 12 }} />
+              <Btn label="Send Feedback →" onClick={async () => {
+                if (!feedbackText.trim()) { showToast("Please write a little feedback first", T.red); return; }
+                try {
+                  await fetch("https://api.web3forms.com/submit", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ access_key: WEB3FORMS_KEY, subject: `💬 SupplyPing Feedback — ${bizName || email}`, "Business": bizName, "Email": email, "Feedback": feedbackText.trim() })
+                  });
+                  setFeedbackSent(true);
+                } catch (e) { showToast("Couldn't send — please try again", T.red); }
+              }} disabled={!feedbackText.trim()} variant="orange" />
+            </>
+          )}
+        </Card>
       </div>
     </div>
   );
