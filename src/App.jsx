@@ -470,6 +470,13 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname;
     const isQR = path === "/r" || path.startsWith("/r/") || params.has("ce") || params.has("l");
+
+    // Password reset: Supabase redirects here with a recovery token in the URL hash
+    const hash = window.location.hash || "";
+    if (path === "/reset" || hash.includes("type=recovery")) {
+      setScreen("reset");
+      return;
+    }
     const locationParam = params.get("location");
     if (locationParam) { setLocation(locationParam); setQrLocation(locationParam); }
     if (isQR) {
@@ -626,6 +633,47 @@ export default function App() {
         </div>
       </div>
 
+      {/* PUBLIC SMS OPT-IN SECTION (visible to Twilio reviewers without login) */}
+      <div id="sms-optin" style={{ background: T.white, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "64px 24px" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 36 }}>
+            <div style={{ fontSize: 11, color: T.hivizDk || T.orange, letterSpacing: 2, fontWeight: 700, marginBottom: 12, textTransform: "uppercase" }}>How SMS Alerts Work</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 32, fontWeight: 700, margin: "0 0 12px", letterSpacing: -1 }}>Text alerts are 100% opt-in</h2>
+            <p style={{ color: T.muted, fontSize: 15, maxWidth: 560, margin: "0 auto", lineHeight: 1.6 }}>
+              SupplyPing only sends SMS to people who explicitly ask for them. Here's exactly how consent is collected.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 32 }}>
+            {[
+              { n: "1", t: "You enter your number", d: "During account setup, a facility operator or their staff member types their own mobile number into the SupplyPing onboarding form." },
+              { n: "2", t: "You check the consent box", d: "An unchecked opt-in box must be actively checked. It states you agree to receive facility-alert texts, that message & data rates may apply, and that consent is not a condition of purchase." },
+              { n: "3", t: "You control it anytime", d: "Reply STOP to any message to unsubscribe immediately, or HELP for assistance. You can opt out at any time." },
+            ].map(s => (
+              <div key={s.n} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 14, padding: "22px 20px" }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: T.ink, color: T.white, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, marginBottom: 12 }}>{s.n}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{s.t}</div>
+                <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.55 }}>{s.d}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 24px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 10 }}>The exact consent language shown at signup:</div>
+            <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, fontStyle: "italic", marginBottom: 16 }}>
+              "By providing a phone number and checking this box, you agree to receive SMS text alerts from SupplyPing about facility issues at this number. Message frequency varies. Message &amp; data rates may apply. Reply STOP to unsubscribe or HELP for help. Consent is not a condition of purchase."
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Example of a message we send:</div>
+            <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, fontFamily: font.body }}>
+              "SupplyPing Alert: Wet Floor / Spill reported at Warehouse Floor, Building A. Reported 2:14 PM. Reply STOP to opt out."
+            </div>
+          </div>
+          <p style={{ textAlign: "center", fontSize: 12, color: T.dim, marginTop: 18 }}>
+            We never sell or share mobile numbers. Full terms in the "SMS Alerts — Terms &amp; Consent" section below.
+          </p>
+        </div>
+      </div>
+
       <div style={{ background: "linear-gradient(135deg, #1A1814 0%, #2a2420 100%)", padding: "80px 24px", textAlign: "center" }}>
         <div style={{ fontSize: 11, color: "#555", letterSpacing: 3, textTransform: "uppercase", marginBottom: 20, fontWeight: 600 }}>GET STARTED TODAY</div>
         <h2 style={{ fontFamily: font.display, fontSize: 40, fontWeight: 700, color: T.white, margin: "0 0 16px", letterSpacing: -1.5 }}>
@@ -740,7 +788,18 @@ export default function App() {
             setAuthLoading(false);
             nav("dashboard");
           }} disabled={!email || !password || authLoading} variant="primary" full />
-          <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: T.muted }}>
+          <div style={{ textAlign: "center", marginTop: 14 }}>
+            <span onClick={async () => {
+              if (!email) { setAuthError("Enter your email above first, then tap 'Forgot password?'"); return; }
+              setAuthError("");
+              const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://supplyping.com/reset" });
+              if (error) { showToast(`❌ ${error.message}`, T.red); return; }
+              showToast("✅ Reset link sent! Check your email inbox.", T.green);
+            }} style={{ fontSize: 13, color: T.blue, cursor: "pointer", fontWeight: 500 }}>
+              Forgot password?
+            </span>
+          </div>
+          <div style={{ textAlign: "center", marginTop: 12, fontSize: 13, color: T.muted }}>
             New to SupplyPing? <span onClick={() => nav("signup")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>Start free trial</span>
           </div>
         </Card>
@@ -1371,6 +1430,41 @@ export default function App() {
             setNewPassword(""); setConfirmPassword("");
             showToast("✅ Password updated!", T.green);
           }} disabled={!newPassword || !confirmPassword || acctLoading} variant="primary" full />
+        </Card>
+      </div>
+    </div>
+  );
+
+  // ── PASSWORD RESET (landed from email link) ──
+  if (screen === "reset") return (
+    <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <style>{`* { box-sizing: border-box; }`}</style>
+      {toast && <Toast msg={toast.msg} color={toast.color} />}
+      <div style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 32 }}>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
+          <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>SupplyPing</span>
+        </div>
+        <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Set a new password</h2>
+        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Enter a new password for your account. Minimum 6 characters.</p>
+        <Card>
+          <Input label="New Password" value={newPassword} onChange={setNewPassword} placeholder="New password" type="password" />
+          <Input label="Confirm New Password" value={confirmPassword} onChange={setConfirmPassword} placeholder="Type it again" type="password" />
+          {authError && <div style={{ background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: T.red, marginBottom: 14 }}>{authError}</div>}
+          <Btn label={acctLoading ? "Updating..." : "Update Password →"} onClick={async () => {
+            if (newPassword.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
+            if (newPassword !== confirmPassword) { setAuthError("Passwords don't match."); return; }
+            setAuthError(""); setAcctLoading(true);
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            setAcctLoading(false);
+            if (error) { setAuthError(error.message + " — the reset link may have expired. Request a new one from the login page."); return; }
+            setNewPassword(""); setConfirmPassword("");
+            showToast("✅ Password updated! You can log in now.", T.green);
+            setTimeout(() => nav("login"), 1500);
+          }} disabled={!newPassword || !confirmPassword || acctLoading} variant="primary" full />
+          <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: T.muted }}>
+            <span onClick={() => nav("login")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>← Back to login</span>
+          </div>
         </Card>
       </div>
     </div>
