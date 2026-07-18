@@ -11,6 +11,39 @@ const MANAGEMENT_EMAIL = "hello@supplyping.com";
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
 
+// ── PHOTO CAPTURE (Supabase Storage bucket: report-photos) ──
+// Compresses to ~1000px client-side so uploads are fast on facility Wi-Fi and
+// never bloat the offline queue. Returns a public URL, or null on failure.
+async function compressImage(file, maxDim = 1000, quality = 0.75) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+async function uploadReportPhoto(file) {
+  try {
+    const blob = await compressImage(file);
+    if (!blob) return null;
+    const name = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const { error } = await supabase.storage.from("report-photos").upload(name, blob, { contentType: "image/jpeg" });
+    if (error) { console.log("Photo upload error:", error); return null; }
+    const { data } = supabase.storage.from("report-photos").getPublicUrl(name);
+    return data?.publicUrl || null;
+  } catch (e) { console.log("Photo upload error:", e); return null; }
+}
+
 const AIRTABLE_TOKEN = "patkVT1Wc5FP40iAq.f98ab9293b37172e41e3d7a1ce3b58ce2ebcdc1b2b55aeff15a5b47198194d77";
 const AIRTABLE_BASE = "appOkUWfKR5sb2Br4";
 
@@ -406,6 +439,9 @@ export default function App() {
   const [testSent, setTestSent] = useState(false);
   const [reportIssues, setReportIssues] = useState([]);
   const [otherText, setOtherText] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [sending, setSending] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
@@ -1243,6 +1279,32 @@ export default function App() {
                 <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder="Describe any other issue here..."
                   style={{ width: "100%", border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }} />
               </div>
+
+              {/* OPTIONAL PHOTO */}
+              <div>
+                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>📷 Add a Photo (optional)</div>
+                {photoPreview ? (
+                  <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `2px solid ${T.green}`, boxShadow: T.shadow }}>
+                    <img src={photoPreview} alt="Issue" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
+                    <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                      style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.65)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontFamily: font.body, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      ✕ Remove
+                    </button>
+                  </div>
+                ) : (
+                  <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, border: `2px dashed ${T.border}`, borderRadius: 12, padding: "16px", cursor: "pointer", background: T.white, boxShadow: T.shadow }}>
+                    <span style={{ fontSize: 20 }}>📷</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: T.muted }}>Take or choose a photo of the issue</span>
+                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (!f) return;
+                        setPhotoFile(f);
+                        setPhotoPreview(URL.createObjectURL(f));
+                      }} />
+                  </label>
+                )}
+              </div>
             </div>
 
             {(reportIssues.length > 0 || otherText.trim()) && (
@@ -1251,10 +1313,20 @@ export default function App() {
               </div>
             )}
 
-            <Btn label="Send Report →" onClick={async () => {
+            <Btn label={sending ? "Sending..." : "Send Report →"} onClick={async () => {
+              if (sending) return;
               const selectedLabels = reportIssues.map(id => ALL_ITEMS.find(s => s.id === id)?.label).filter(Boolean);
               if (otherText.trim()) selectedLabels.push(`Other: ${otherText.trim()}`);
               if (selectedLabels.length === 0) return;
+              setSending(true);
+
+              // Upload photo first (if one was added). Non-blocking on failure —
+              // a report without its photo still beats no report.
+              let photoUrl = null;
+              if (photoFile) {
+                photoUrl = await uploadReportPhoto(photoFile);
+                if (!photoUrl) showToast("⚠️ Photo couldn't upload — sending report without it.", T.yellow);
+              }
               const issueString = selectedLabels.join(", ");
               const p = new URLSearchParams(window.location.search);
               // Recipient priority: QR-embedded cleaning email → onboarding value
@@ -1273,7 +1345,7 @@ export default function App() {
               const biz = qrBusiness || p.get("b") || "SupplyPing";
 
               // 1) Airtable sync
-              await submitReportToAirtable({
+              const reportFields = {
                 "Location": locName,
                 "Room": roomName,
                 "Stall": `Stall ${stallNum}`,
@@ -1281,7 +1353,9 @@ export default function App() {
                 "Cleaning Team Email": cleaningEmail,
                 "Reported At": new Date().toISOString(),
                 "Resolved": false
-              });
+              };
+              if (photoUrl) reportFields["Photo"] = [{ url: photoUrl }];
+              await submitReportToAirtable(reportFields);
 
               // 2) EmailJS alert (or offline queue).
               // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
@@ -1291,7 +1365,7 @@ export default function App() {
                 cleaning_email: recipients,
                 to_email: recipients,
                 email: recipients,
-                issue: issueString,
+                issue: photoUrl ? `${issueString} — 📷 Photo: ${photoUrl}` : issueString,
                 location: locName,
                 room: roomName,
                 stall: `Stall ${stallNum}`,
@@ -1302,6 +1376,7 @@ export default function App() {
               if (result.status === "sent") showToast("✅ Report sent! Team notified.", T.green);
               else if (result.status === "offline") showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
               else showToast(`❌ Alert rejected: ${result.error} — report was saved to Airtable.`, T.red);
+              setSending(false);
               setReportDone(true);
             }} disabled={reportIssues.length === 0 && !otherText.trim()} variant="primary" full size="lg" />
 
@@ -1315,7 +1390,7 @@ export default function App() {
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>Report Sent!</h2>
             <p style={{ color: T.muted, fontSize: 15 }}>The team has been notified and is on the way.</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setReportDone(false); }} variant="outline" />
+              <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
             </div>
           </div>
