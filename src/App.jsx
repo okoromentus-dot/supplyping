@@ -1293,12 +1293,27 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <button type="button" onClick={() => { const el = document.getElementById("photoInput"); if (el) { el.value = ""; el.click(); } }}
-                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, border: `2px dashed ${T.border}`, borderRadius: 12, padding: "16px", cursor: "pointer", background: T.white, boxShadow: T.shadow, fontFamily: font.body }}>
-                      <span style={{ fontSize: 20 }}>📷</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: T.muted }}>Take or choose a photo of the issue</span>
-                    </button>
-                    <input id="photoInput" type="file" accept="image/*"
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button type="button" onClick={() => { const el = document.getElementById("photoCam"); if (el) { el.value = ""; el.click(); } }}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `2px dashed ${T.border}`, borderRadius: 12, padding: "15px 10px", cursor: "pointer", background: T.white, boxShadow: T.shadow, fontFamily: font.body }}>
+                        <span style={{ fontSize: 18 }}>📷</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted }}>Take Photo</span>
+                      </button>
+                      <button type="button" onClick={() => { const el = document.getElementById("photoLib"); if (el) { el.value = ""; el.click(); } }}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `2px dashed ${T.border}`, borderRadius: 12, padding: "15px 10px", cursor: "pointer", background: T.white, boxShadow: T.shadow, fontFamily: font.body }}>
+                        <span style={{ fontSize: 18 }}>🖼️</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted }}>From Library</span>
+                      </button>
+                    </div>
+                    <input id="photoCam" type="file" accept="image/*" capture="environment"
+                      style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (!f) return;
+                        setPhotoFile(f);
+                        setPhotoPreview(URL.createObjectURL(f));
+                      }} />
+                    <input id="photoLib" type="file" accept="image/*"
                       style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
                       onChange={(e) => {
                         const f = e.target.files && e.target.files[0];
