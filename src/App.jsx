@@ -32,6 +32,29 @@ async function compressImage(file, maxDim = 1000, quality = 0.75) {
   });
 }
 
+// Sends the compressed photo to our serverless function for AI triage.
+// Fails soft: on any error the worker just fills the form manually.
+async function analyzeHazardPhoto(file) {
+  try {
+    const blob = await compressImage(file, 800, 0.7);
+    if (!blob) return null;
+    const b64 = await new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(",")[1]);
+      r.onerror = () => res(null);
+      r.readAsDataURL(blob);
+    });
+    if (!b64) return null;
+    const resp = await fetch("/api/analyze-hazard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }),
+    });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (e) { return null; }
+}
+
 async function uploadReportPhoto(file) {
   try {
     const blob = await compressImage(file);
@@ -289,12 +312,13 @@ async function fetchReports() {
 
 async function submitReportToAirtable(fields) {
   try {
-    await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ fields })
     });
-  } catch (e) { console.log("Airtable submit error:", e); }
+    return res.ok;
+  } catch (e) { console.log("Airtable submit error:", e); return false; }
 }
 
 async function resolveInAirtable(id) {
@@ -442,6 +466,10 @@ export default function App() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [sending, setSending] = useState(false);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [aiSeverity, setAiSeverity] = useState("");
+  const [aiDescription, setAiDescription] = useState("");
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
@@ -1286,7 +1314,7 @@ export default function App() {
                 {photoPreview ? (
                   <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `2px solid ${T.green}`, boxShadow: T.shadow }}>
                     <img src={photoPreview} alt="Issue" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
-                    <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                    <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiAnalyzing(false); setAiSeverity(""); setAiDescription(""); }}
                       style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.65)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontFamily: font.body, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                       ✕ Remove
                     </button>
@@ -1307,21 +1335,76 @@ export default function App() {
                     </div>
                     <input id="photoCam" type="file" accept="image/*" capture="environment"
                       style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const f = e.target.files && e.target.files[0];
                         if (!f) return;
                         setPhotoFile(f);
                         setPhotoPreview(URL.createObjectURL(f));
+                        // AI triage — fails soft to manual flow
+                        setAiAnalyzing(true); setAiSuggestion(null);
+                        const ai = await analyzeHazardPhoto(f);
+                        setAiAnalyzing(false);
+                        if (ai && ai.item) {
+                          setAiSuggestion(ai);
+                          setAiSeverity(ai.severity || "Medium");
+                          setAiDescription(ai.description || "");
+                          const match = ALL_ITEMS.find(s => s.label.includes(ai.item) || ai.item.includes(s.label.replace(/^\S+\s/, "")));
+                          if (match) setReportIssues(prev => prev.includes(match.id) ? prev : [...prev, match.id]);
+                        }
                       }} />
                     <input id="photoLib" type="file" accept="image/*"
                       style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const f = e.target.files && e.target.files[0];
                         if (!f) return;
                         setPhotoFile(f);
                         setPhotoPreview(URL.createObjectURL(f));
+                        // AI triage — fails soft to manual flow
+                        setAiAnalyzing(true); setAiSuggestion(null);
+                        const ai = await analyzeHazardPhoto(f);
+                        setAiAnalyzing(false);
+                        if (ai && ai.item) {
+                          setAiSuggestion(ai);
+                          setAiSeverity(ai.severity || "Medium");
+                          setAiDescription(ai.description || "");
+                          const match = ALL_ITEMS.find(s => s.label.includes(ai.item) || ai.item.includes(s.label.replace(/^\S+\s/, "")));
+                          if (match) setReportIssues(prev => prev.includes(match.id) ? prev : [...prev, match.id]);
+                        }
                       }} />
                   </>
+                )}
+                {(aiAnalyzing || aiSuggestion) && (
+                  <div style={{ marginTop: 10, background: T.white, border: `2px solid ${aiAnalyzing ? T.border : T.greenBorder}`, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow }}>
+                    {aiAnalyzing ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: T.muted, fontWeight: 600 }}>
+                        <span style={{ fontSize: 18 }}>🤖</span> Analyzing photo…
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 10.5, color: T.green, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 8 }}>
+                          🤖 AI Suggestion — review &amp; edit before sending
+                        </div>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 10 }}>
+                          {aiSuggestion.item}{!aiSuggestion.confident && <span style={{ fontWeight: 500, color: T.muted }}> (low confidence — please verify)</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Suggested severity</div>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                          {["Low", "Medium", "High"].map(s => (
+                            <button key={s} type="button" onClick={() => setAiSeverity(s)}
+                              style={{ flex: 1, padding: "8px 0", borderRadius: 9, fontFamily: font.body, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                border: `2px solid ${aiSeverity === s ? (s === "High" ? T.red : s === "Medium" ? T.yellow : T.green) : T.border}`,
+                                background: aiSeverity === s ? (s === "High" ? T.redLight : s === "Medium" ? T.yellowLight : T.greenLight) : T.white,
+                                color: aiSeverity === s ? (s === "High" ? T.red : s === "Medium" ? T.yellow : T.green) : T.muted }}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Description (editable)</div>
+                        <textarea value={aiDescription} onChange={e => setAiDescription(e.target.value)} rows={2}
+                          style={{ width: "100%", border: `1.5px solid ${T.border}`, borderRadius: 9, padding: "9px 12px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.cream, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -1374,7 +1457,13 @@ export default function App() {
                 "Resolved": false
               };
               if (photoUrl) reportFields["Photo"] = [{ url: photoUrl }];
-              await submitReportToAirtable(reportFields);
+              // Try with AI fields; if the Airtable table doesn't have them yet,
+              // retry with base fields so the report is never lost.
+              const extendedFields = { ...reportFields };
+              if (aiSeverity) extendedFields["Severity"] = aiSeverity;
+              if (aiDescription) extendedFields["Details"] = aiDescription;
+              const ok = await submitReportToAirtable(extendedFields);
+              if (!ok) await submitReportToAirtable(reportFields);
 
               // 2) EmailJS alert (or offline queue).
               // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
@@ -1384,7 +1473,12 @@ export default function App() {
                 cleaning_email: recipients,
                 to_email: recipients,
                 email: recipients,
-                issue: photoUrl ? `${issueString} — 📷 Photo: ${photoUrl}` : issueString,
+                issue: [
+                  issueString,
+                  aiSeverity ? `Severity: ${aiSeverity}` : "",
+                  aiDescription ? `Details: ${aiDescription}` : "",
+                  photoUrl ? `📷 Photo: ${photoUrl}` : ""
+                ].filter(Boolean).join(" — "),
                 location: locName,
                 room: roomName,
                 stall: `Stall ${stallNum}`,
@@ -1409,7 +1503,7 @@ export default function App() {
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>Report Sent!</h2>
             <p style={{ color: T.muted, fontSize: 15 }}>The team has been notified and is on the way.</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setReportDone(false); }} variant="outline" />
+              <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
             </div>
           </div>
