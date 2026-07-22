@@ -8,6 +8,10 @@ const EMAILJS_TEMPLATE = "template_58s7r9h";
 const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
+// Build marker — bump when triggering redeploys; visible in browser console.
+const BUILD_VERSION = "2026-07-22-ai-diagnostics-1";
+try { console.log(`[SupplyPing] build ${BUILD_VERSION} — AI diagnostics active`); } catch (e) {}
+
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
 
