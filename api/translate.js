@@ -8,8 +8,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+  const key = process.env.ANTHROPIC_API_KEY || process.env.ANTHROLIC_API_KEY;
+  if (!key) { console.error("[translate] No API key configured"); return res.status(500).json({ error: "API key not configured" }); }
 
   try {
     const { text } = req.body || {};
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
         }],
       }),
     });
-    if (!resp.ok) return res.status(502).json({ error: "translate failed" });
+    if (!resp.ok) { console.error("[translate] Anthropic API error", resp.status); return res.status(502).json({ error: "translate failed" }); }
     const data = await resp.json();
     const out = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
     return res.status(200).json({ english: out || String(text) });

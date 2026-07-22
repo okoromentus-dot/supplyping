@@ -44,15 +44,25 @@ async function analyzeHazardPhoto(file) {
       r.onerror = () => res(null);
       r.readAsDataURL(blob);
     });
-    if (!b64) return null;
+    if (!b64) { console.error("[AI] Could not read/compress image"); return { _error: "Could not read the photo" }; }
     const resp = await fetch("/api/analyze-hazard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }),
     });
-    if (!resp.ok) return null;
-    return await resp.json();
-  } catch (e) { return null; }
+    let data = null;
+    try { data = await resp.json(); } catch (e) {
+      console.error("[AI] Non-JSON response from /api/analyze-hazard — status", resp.status, "(if status is 200 with HTML, the vercel.json rewrite is swallowing /api routes)");
+      return { _error: `Server returned status ${resp.status} (not JSON)` };
+    }
+    if (!resp.ok) {
+      console.error("[AI] /api/analyze-hazard error:", resp.status, data);
+      const msg = [data.error, data.detail].filter(Boolean).join(" — ");
+      return { _error: msg || `Request failed (${resp.status})` };
+    }
+    console.log("[AI] analysis result:", data);
+    return data;
+  } catch (e) { console.error("[AI] fetch failed:", e); return { _error: "Network error reaching AI service" }; }
 }
 
 async function uploadReportPhoto(file) {
@@ -1414,7 +1424,7 @@ export default function App() {
                         setAiAnalyzing(true); setAiSuggestion(null);
                         const ai = await analyzeHazardPhoto(f);
                         setAiAnalyzing(false);
-                        if (!ai) showToast("🤖 AI analysis unavailable — please fill the form manually.", T.yellow);
+                        if (!ai || ai._error) showToast(`🤖 AI unavailable: ${ai && ai._error ? ai._error : "unknown error"} — fill the form manually.`, T.yellow);
                         if (ai && ai.item) {
                           setAiSuggestion(ai);
                           setAiSeverity(ai.severity || "Medium");
@@ -1434,7 +1444,7 @@ export default function App() {
                         setAiAnalyzing(true); setAiSuggestion(null);
                         const ai = await analyzeHazardPhoto(f);
                         setAiAnalyzing(false);
-                        if (!ai) showToast("🤖 AI analysis unavailable — please fill the form manually.", T.yellow);
+                        if (!ai || ai._error) showToast(`🤖 AI unavailable: ${ai && ai._error ? ai._error : "unknown error"} — fill the form manually.`, T.yellow);
                         if (ai && ai.item) {
                           setAiSuggestion(ai);
                           setAiSeverity(ai.severity || "Medium");

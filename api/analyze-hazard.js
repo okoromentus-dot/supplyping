@@ -25,8 +25,13 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+  // Accept the correct name and the common typo, so a misnamed env var
+  // doesn't take the feature down.
+  const key = process.env.ANTHROPIC_API_KEY || process.env.ANTHROLIC_API_KEY;
+  if (!key) {
+    console.error("[analyze-hazard] No API key found. Env vars present:", Object.keys(process.env).filter(k => k.includes("ANTH")).join(", ") || "none matching ANTH*");
+    return res.status(500).json({ error: "API key not configured in Vercel. Add ANTHROPIC_API_KEY in Project Settings → Environment Variables, then redeploy." });
+  }
 
   try {
     const { image, mediaType } = req.body || {};
@@ -67,7 +72,8 @@ If the photo does not clearly show a facility issue, set "confident": false and 
 
     if (!resp.ok) {
       const t = await resp.text();
-      return res.status(502).json({ error: `AI request failed: ${resp.status}`, detail: t.slice(0, 300) });
+      console.error("[analyze-hazard] Anthropic API error", resp.status, t.slice(0, 500));
+      return res.status(502).json({ error: `AI request failed (${resp.status})`, detail: t.slice(0, 300) });
     }
 
     const data = await resp.json();
@@ -82,6 +88,7 @@ If the photo does not clearly show a facility issue, set "confident": false and 
 
     return res.status(200).json(parsed);
   } catch (e) {
+    console.error("[analyze-hazard] Unhandled error:", e);
     return res.status(500).json({ error: "Analysis failed", detail: String(e).slice(0, 200) });
   }
 }
