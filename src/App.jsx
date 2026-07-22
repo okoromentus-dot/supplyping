@@ -257,6 +257,34 @@ function getReportCategories(assetType) {
   }
 }
 
+// ── WORKER LANGUAGES (report page). Labels stay canonical English in
+// payloads/emails; translation is display-only, plus free-text translation
+// to English at submit via /api/translate. ──
+const LANGS = [
+  { id: "en", label: "English", voice: "en-US" },
+  { id: "es", label: "Español", voice: "es-MX" },
+  { id: "fr", label: "Français", voice: "fr-FR" },
+  { id: "ar", label: "العربية", voice: "ar-SA" },
+  { id: "bn", label: "বাংলা", voice: "bn-BD" },
+  { id: "hi", label: "हिन्दी", voice: "hi-IN" },
+];
+
+const TR = {
+  es: { "Safety & Hazards": "Seguridad y Peligros", "Security & Facilities": "Vigilancia e Instalaciones", "Maintenance & Repairs": "Mantenimiento y Reparaciones", "Cleaning & Sanitation": "Limpieza e Higiene", "Supplies": "Suministros", "Wet Floor / Spill": "Piso Mojado / Derrame", "Blocked Exit / Aisle": "Salida / Pasillo Bloqueado", "Trip / Fall Hazard": "Riesgo de Tropiezo / Caída", "Near-Miss / Incident": "Casi Accidente / Incidente", "PPE / Equipment Unsafe": "EPP / Equipo Inseguro", "Access / Door Issue": "Problema de Acceso / Puerta", "Property Damage": "Daño a la Propiedad", "Suspicious Activity": "Actividad Sospechosa", "Lighting Out / Flickering": "Luz Apagada / Parpadeante", "HVAC / Temperature Issue": "Problema de Clima / Temperatura", "Broken Fixture / Door": "Accesorio / Puerta Rota", "Equipment Issue": "Problema de Equipo", "Spill / Mess Needs Cleanup": "Derrame / Suciedad por Limpiar", "Restroom Needs Attention": "Baño Necesita Atención", "Trash / Bins Full": "Basura / Botes Llenos", "No Soap": "Sin Jabón", "No Paper Towels": "Sin Toallas de Papel", "No Toilet Paper": "Sin Papel Higiénico", "No Hand Sanitizer": "Sin Desinfectante", "Breakroom Restock": "Reabastecer Comedor", "Report a Facility Issue": "Reportar un Problema", "Select the issue(s). Takes 10 seconds.": "Seleccione el problema. Toma 10 segundos.", "Select one or more issues, then tap Send": "Seleccione y toque Enviar", "Other / Custom Issue": "Otro Problema", "Describe any other issue here...": "Describa el problema aquí...", "Add a Photo (optional)": "Agregar Foto (opcional)", "Take Photo": "Tomar Foto", "From Library": "De la Galería", "Send Report →": "Enviar Reporte →", "Sending...": "Enviando...", "Report Sent!": "¡Reporte Enviado!", "The team has been notified and is on the way.": "El equipo ha sido notificado y va en camino.", "Report Another Issue": "Reportar Otro Problema", "Speak": "Hablar", "Listening...": "Escuchando..." },
+  fr: { "Safety & Hazards": "Sécurité et Dangers", "Security & Facilities": "Sûreté et Installations", "Maintenance & Repairs": "Maintenance et Réparations", "Cleaning & Sanitation": "Nettoyage et Hygiène", "Supplies": "Fournitures", "Wet Floor / Spill": "Sol Mouillé / Déversement", "Blocked Exit / Aisle": "Sortie / Allée Bloquée", "Trip / Fall Hazard": "Risque de Chute", "Near-Miss / Incident": "Quasi-Accident / Incident", "PPE / Equipment Unsafe": "EPI / Équipement Dangereux", "Access / Door Issue": "Problème d'Accès / Porte", "Property Damage": "Dommage Matériel", "Suspicious Activity": "Activité Suspecte", "Lighting Out / Flickering": "Éclairage Éteint / Clignotant", "HVAC / Temperature Issue": "Problème CVC / Température", "Broken Fixture / Door": "Équipement / Porte Cassée", "Equipment Issue": "Problème d'Équipement", "Spill / Mess Needs Cleanup": "Déversement / Saleté à Nettoyer", "Restroom Needs Attention": "Toilettes à Vérifier", "Trash / Bins Full": "Poubelles Pleines", "No Soap": "Pas de Savon", "No Paper Towels": "Pas d'Essuie-tout", "No Toilet Paper": "Pas de Papier Toilette", "No Hand Sanitizer": "Pas de Gel Désinfectant", "Breakroom Restock": "Réappro Salle de Pause", "Report a Facility Issue": "Signaler un Problème", "Select the issue(s). Takes 10 seconds.": "Sélectionnez le problème. 10 secondes.", "Select one or more issues, then tap Send": "Sélectionnez puis appuyez Envoyer", "Other / Custom Issue": "Autre Problème", "Describe any other issue here...": "Décrivez le problème ici...", "Add a Photo (optional)": "Ajouter une Photo (optionnel)", "Take Photo": "Prendre une Photo", "From Library": "De la Galerie", "Send Report →": "Envoyer →", "Sending...": "Envoi...", "Report Sent!": "Signalement Envoyé !", "The team has been notified and is on the way.": "L'équipe a été notifiée et arrive.", "Report Another Issue": "Signaler un Autre Problème", "Speak": "Parler", "Listening...": "Écoute..." },
+  ar: { "Safety & Hazards": "السلامة والمخاطر", "Security & Facilities": "الأمن والمرافق", "Maintenance & Repairs": "الصيانة والإصلاحات", "Cleaning & Sanitation": "التنظيف والنظافة", "Supplies": "المستلزمات", "Wet Floor / Spill": "أرضية مبللة / انسكاب", "Blocked Exit / Aisle": "مخرج / ممر مسدود", "Trip / Fall Hazard": "خطر التعثر / السقوط", "Near-Miss / Incident": "حادث وشيك / واقعة", "PPE / Equipment Unsafe": "معدات وقاية غير آمنة", "Access / Door Issue": "مشكلة دخول / باب", "Property Damage": "أضرار بالممتلكات", "Suspicious Activity": "نشاط مشبوه", "Lighting Out / Flickering": "إضاءة مطفأة / وامضة", "HVAC / Temperature Issue": "مشكلة تكييف / حرارة", "Broken Fixture / Door": "تركيبات / باب مكسور", "Equipment Issue": "مشكلة معدات", "Spill / Mess Needs Cleanup": "انسكاب يحتاج تنظيف", "Restroom Needs Attention": "دورة المياه تحتاج عناية", "Trash / Bins Full": "سلال القمامة ممتلئة", "No Soap": "لا يوجد صابون", "No Paper Towels": "لا توجد مناشف ورقية", "No Toilet Paper": "لا يوجد ورق تواليت", "No Hand Sanitizer": "لا يوجد معقم", "Breakroom Restock": "تزويد غرفة الاستراحة", "Report a Facility Issue": "الإبلاغ عن مشكلة", "Select the issue(s). Takes 10 seconds.": "اختر المشكلة. يستغرق 10 ثوانٍ.", "Select one or more issues, then tap Send": "اختر ثم اضغط إرسال", "Other / Custom Issue": "مشكلة أخرى", "Describe any other issue here...": "صف المشكلة هنا...", "Add a Photo (optional)": "أضف صورة (اختياري)", "Take Photo": "التقط صورة", "From Library": "من المعرض", "Send Report →": "إرسال البلاغ", "Sending...": "جارٍ الإرسال...", "Report Sent!": "تم إرسال البلاغ!", "The team has been notified and is on the way.": "تم إخطار الفريق وهو في الطريق.", "Report Another Issue": "الإبلاغ عن مشكلة أخرى", "Speak": "تحدث", "Listening...": "يستمع..." },
+  bn: { "Safety & Hazards": "নিরাপত্তা ও ঝুঁকি", "Security & Facilities": "সিকিউরিটি ও ফ্যাসিলিটি", "Maintenance & Repairs": "রক্ষণাবেক্ষণ ও মেরামত", "Cleaning & Sanitation": "পরিচ্ছন্নতা ও স্যানিটেশন", "Supplies": "সরবরাহ", "Wet Floor / Spill": "ভেজা মেঝে / ছলকে পড়া", "Blocked Exit / Aisle": "অবরুদ্ধ প্রস্থান / পথ", "Trip / Fall Hazard": "হোঁচট / পড়ার ঝুঁকি", "Near-Miss / Incident": "প্রায়-দুর্ঘটনা / ঘটনা", "PPE / Equipment Unsafe": "পিপিই / অনিরাপদ সরঞ্জাম", "Access / Door Issue": "প্রবেশ / দরজার সমস্যা", "Property Damage": "সম্পত্তির ক্ষতি", "Suspicious Activity": "সন্দেহজনক কার্যকলাপ", "Lighting Out / Flickering": "লাইট নষ্ট / ঝিকমিক", "HVAC / Temperature Issue": "এসি / তাপমাত্রার সমস্যা", "Broken Fixture / Door": "ভাঙা ফিক্সচার / দরজা", "Equipment Issue": "সরঞ্জামের সমস্যা", "Spill / Mess Needs Cleanup": "পরিষ্কার প্রয়োজন", "Restroom Needs Attention": "টয়লেটে মনোযোগ প্রয়োজন", "Trash / Bins Full": "ময়লার ঝুড়ি ভর্তি", "No Soap": "সাবান নেই", "No Paper Towels": "কাগজের তোয়ালে নেই", "No Toilet Paper": "টয়লেট পেপার নেই", "No Hand Sanitizer": "স্যানিটাইজার নেই", "Breakroom Restock": "ব্রেকরুম রিস্টক", "Report a Facility Issue": "সমস্যা রিপোর্ট করুন", "Select the issue(s). Takes 10 seconds.": "সমস্যা নির্বাচন করুন। ১০ সেকেন্ড লাগে।", "Select one or more issues, then tap Send": "নির্বাচন করে পাঠান চাপুন", "Other / Custom Issue": "অন্যান্য সমস্যা", "Describe any other issue here...": "সমস্যাটি এখানে লিখুন...", "Add a Photo (optional)": "ছবি যোগ করুন (ঐচ্ছিক)", "Take Photo": "ছবি তুলুন", "From Library": "গ্যালারি থেকে", "Send Report →": "রিপোর্ট পাঠান →", "Sending...": "পাঠানো হচ্ছে...", "Report Sent!": "রিপোর্ট পাঠানো হয়েছে!", "The team has been notified and is on the way.": "টিমকে জানানো হয়েছে, তারা আসছে।", "Report Another Issue": "আরেকটি সমস্যা রিপোর্ট করুন", "Speak": "বলুন", "Listening...": "শোনা হচ্ছে..." },
+  hi: { "Safety & Hazards": "सुरक्षा और खतरे", "Security & Facilities": "सिक्योरिटी और सुविधाएँ", "Maintenance & Repairs": "रखरखाव और मरम्मत", "Cleaning & Sanitation": "सफ़ाई और स्वच्छता", "Supplies": "सामग्री", "Wet Floor / Spill": "गीला फ़र्श / रिसाव", "Blocked Exit / Aisle": "अवरुद्ध निकास / गलियारा", "Trip / Fall Hazard": "ठोकर / गिरने का खतरा", "Near-Miss / Incident": "निकट-चूक / घटना", "PPE / Equipment Unsafe": "पीपीई / असुरक्षित उपकरण", "Access / Door Issue": "प्रवेश / दरवाज़े की समस्या", "Property Damage": "संपत्ति क्षति", "Suspicious Activity": "संदिग्ध गतिविधि", "Lighting Out / Flickering": "लाइट बंद / टिमटिमाती", "HVAC / Temperature Issue": "एसी / तापमान समस्या", "Broken Fixture / Door": "टूटा उपकरण / दरवाज़ा", "Equipment Issue": "उपकरण समस्या", "Spill / Mess Needs Cleanup": "सफ़ाई की ज़रूरत", "Restroom Needs Attention": "शौचालय पर ध्यान दें", "Trash / Bins Full": "कूड़ेदान भरे हैं", "No Soap": "साबुन नहीं है", "No Paper Towels": "पेपर टॉवल नहीं है", "No Toilet Paper": "टॉयलेट पेपर नहीं है", "No Hand Sanitizer": "सैनिटाइज़र नहीं है", "Breakroom Restock": "ब्रेकरूम रीस्टॉक", "Report a Facility Issue": "समस्या रिपोर्ट करें", "Select the issue(s). Takes 10 seconds.": "समस्या चुनें। 10 सेकंड लगते हैं।", "Select one or more issues, then tap Send": "चुनें और भेजें दबाएँ", "Other / Custom Issue": "अन्य समस्या", "Describe any other issue here...": "समस्या यहाँ लिखें...", "Add a Photo (optional)": "फ़ोटो जोड़ें (वैकल्पिक)", "Take Photo": "फ़ोटो लें", "From Library": "गैलरी से", "Send Report →": "रिपोर्ट भेजें →", "Sending...": "भेजा जा रहा है...", "Report Sent!": "रिपोर्ट भेज दी गई!", "The team has been notified and is on the way.": "टीम को सूचित कर दिया गया है।", "Report Another Issue": "एक और समस्या रिपोर्ट करें", "Speak": "बोलें", "Listening...": "सुन रहा है..." },
+};
+
+// Translate a plain string; returns English when no translation exists.
+function tr(lang, s) { return (TR[lang] && TR[lang][s]) || s; }
+// Translate a label that may carry a leading emoji (category labels).
+function trL(lang, label) {
+  const m = String(label).match(/^([^A-Za-z\u0600-\u06FF]*)(.*)$/);
+  return m ? m[1] + tr(lang, m[2]) : tr(lang, label);
+}
+
 const AREA_TYPES = [
   { id: "default", label: "All Categories (default)" },
   { id: "safety", label: "⚠️ Safety Zone" },
@@ -470,6 +498,8 @@ export default function App() {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [aiSeverity, setAiSeverity] = useState("");
   const [aiDescription, setAiDescription] = useState("");
+  const [reportLang, setReportLang] = useState("en");
+  const [listening, setListening] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
@@ -492,9 +522,20 @@ export default function App() {
   const resolved = alerts.filter(a => a.resolved);
 
   const resolve = async (id) => {
+    const item = alerts.find(a => a.id === id);
     setAlerts(p => p.map(a => a.id === id ? { ...a, resolved: true } : a));
     await resolveInAirtable(id);
-    showToast("✅ Issue marked as resolved!", T.green);
+    // Notify the team + management that the issue is closed
+    if (item) {
+      const recipients = [item.cleaningEmail, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
+      sendOrQueueAlert({
+        cleaning_email: recipients, to_email: recipients, email: recipients,
+        issue: `✅ RESOLVED: ${item.status || item.supply.label}`,
+        location: item.location || "", room: item.room, stall: item.stall,
+        business: bizName || email, time: new Date().toLocaleString(),
+      });
+    }
+    showToast("✅ Resolved — team notified!", T.green);
   };
 
   const addRoom = () => setRooms(p => [...p, { name: "", stalls: 1, category: "default" }]);
@@ -541,6 +582,8 @@ export default function App() {
       setScreen("reset");
       return;
     }
+    if (path === "/terms") { setScreen("terms"); return; }
+    if (path === "/privacy") { setScreen("privacy"); return; }
     const locationParam = params.get("location");
     if (locationParam) { setLocation(locationParam); setQrLocation(locationParam); }
     if (isQR) {
@@ -959,7 +1002,7 @@ export default function App() {
               <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
                 <input type="checkbox" checked={smsConsent} onChange={e => setSmsConsent(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18, accentColor: T.green, flexShrink: 0, cursor: "pointer" }} />
                 <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-                  By providing a phone number and checking this box, you agree to receive SMS text alerts from SupplyPing about facility issues at this number. Message frequency varies. Message &amp; data rates may apply. Reply <b>STOP</b> to unsubscribe or <b>HELP</b> for help. Consent is not a condition of purchase.
+                  By checking this box, you agree to receive SMS text messages from SupplyPing regarding facility hazards, operational alerts, and account notifications. Message frequency varies. Message and data rates may apply. You can reply <b>STOP</b> to opt-out or <b>HELP</b> for help. Consent is not a condition of purchase. See our <a href="/terms" target="_blank" style={{ color: T.blue }}>Terms</a> and <a href="/privacy" target="_blank" style={{ color: T.blue }}>Privacy Policy</a>.
                 </span>
               </label>
             </div>
@@ -1269,8 +1312,16 @@ export default function App() {
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ width: 56, height: 56, background: T.ink, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 16px" }}>📋</div>
               <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Facility Operations</div>
-              <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>Report a Facility Issue</h2>
-              <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>Select the issue(s). Takes 10 seconds.</p>
+              <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>{tr(reportLang, "Report a Facility Issue")}</h2>
+              <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>{tr(reportLang, "Select the issue(s). Takes 10 seconds.")}</p>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
+                {LANGS.map(l => (
+                  <button key={l.id} onClick={() => setReportLang(l.id)}
+                    style={{ padding: "5px 12px", borderRadius: 100, fontFamily: font.body, fontSize: 11.5, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${reportLang === l.id ? T.ink : T.border}`, background: reportLang === l.id ? T.ink : T.white, color: reportLang === l.id ? T.white : T.muted }}>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
               {(qrRoom || qrLocation) && (
                 <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, display: "inline-block", marginTop: 6 }}>
                   📍 {[qrLocation, qrRoom, qrStall ? `Unit/Asset ${qrStall}` : ""].filter(Boolean).join(" · ")}
@@ -1279,13 +1330,13 @@ export default function App() {
             </div>
 
             <div style={{ background: T.blueLight, border: `1px solid ${T.blueBorder}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.blue, fontWeight: 500, textAlign: "center", marginBottom: 16 }}>
-              ✓ Select one or more issues, then tap Send
+              ✓ {tr(reportLang, "Select one or more issues, then tap Send")}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
               {getReportCategories(qrCategory).map(cat => (
                 <div key={cat.id}>
-                  <div style={{ fontSize: 11, color: cat.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>{cat.label}</div>
+                  <div style={{ fontSize: 11, color: cat.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>{trL(reportLang, cat.label)}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {cat.items.map(s => {
                       const sel = reportIssues.includes(s.id);
@@ -1294,7 +1345,7 @@ export default function App() {
                           style={{ background: sel ? T.ink : T.white, border: `2px solid ${sel ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: T.shadow }}>
                           <span style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${sel ? T.white : T.dim}`, background: sel ? T.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, color: T.white }}>{sel ? "✓" : ""}</span>
                           <span style={{ fontSize: 22 }}>{s.emoji}</span>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: sel ? T.white : T.ink }}>{s.label}</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: sel ? T.white : T.ink }}>{tr(reportLang, s.label)}</span>
                         </button>
                       );
                     })}
@@ -1303,14 +1354,33 @@ export default function App() {
               ))}
 
               <div>
-                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>✏️ Other / Custom Issue</div>
-                <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder="Describe any other issue here..."
-                  style={{ width: "100%", border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }} />
+                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>✏️ {tr(reportLang, "Other / Custom Issue")}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder={tr(reportLang, "Describe any other issue here...")}
+                    dir={reportLang === "ar" ? "rtl" : "ltr"}
+                    style={{ flex: 1, border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }} />
+                  {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+                    <button type="button" onClick={() => {
+                      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                      const rec = new SR();
+                      rec.lang = (LANGS.find(l => l.id === reportLang) || LANGS[0]).voice;
+                      rec.interimResults = false;
+                      rec.onresult = (ev) => { const t = ev.results[0][0].transcript; setOtherText(prev => (prev ? prev + " " : "") + t); setListening(false); };
+                      rec.onerror = () => setListening(false);
+                      rec.onend = () => setListening(false);
+                      setListening(true); rec.start();
+                    }}
+                      style={{ width: 52, borderRadius: 12, border: `2px solid ${listening ? T.red : T.border}`, background: listening ? T.redLight : T.white, cursor: "pointer", fontSize: 20, boxShadow: T.shadow }}>
+                      {listening ? "🔴" : "🎤"}
+                    </button>
+                  )}
+                </div>
+                {listening && <div style={{ fontSize: 12, color: T.red, marginTop: 6, fontWeight: 600 }}>{tr(reportLang, "Listening...")}</div>}
               </div>
 
               {/* OPTIONAL PHOTO */}
               <div>
-                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>📷 Add a Photo (optional)</div>
+                <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8, padding: "4px 0" }}>📷 {tr(reportLang, "Add a Photo (optional)")}</div>
                 {photoPreview ? (
                   <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `2px solid ${T.green}`, boxShadow: T.shadow }}>
                     <img src={photoPreview} alt="Issue" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
@@ -1325,12 +1395,12 @@ export default function App() {
                       <button type="button" onClick={() => { const el = document.getElementById("photoCam"); if (el) { el.value = ""; el.click(); } }}
                         style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `2px dashed ${T.border}`, borderRadius: 12, padding: "15px 10px", cursor: "pointer", background: T.white, boxShadow: T.shadow, fontFamily: font.body }}>
                         <span style={{ fontSize: 18 }}>📷</span>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted }}>Take Photo</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted }}>{tr(reportLang, "Take Photo")}</span>
                       </button>
                       <button type="button" onClick={() => { const el = document.getElementById("photoLib"); if (el) { el.value = ""; el.click(); } }}
                         style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `2px dashed ${T.border}`, borderRadius: 12, padding: "15px 10px", cursor: "pointer", background: T.white, boxShadow: T.shadow, fontFamily: font.body }}>
                         <span style={{ fontSize: 18 }}>🖼️</span>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted }}>From Library</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted }}>{tr(reportLang, "From Library")}</span>
                       </button>
                     </div>
                     <input id="photoCam" type="file" accept="image/*" capture="environment"
@@ -1344,6 +1414,7 @@ export default function App() {
                         setAiAnalyzing(true); setAiSuggestion(null);
                         const ai = await analyzeHazardPhoto(f);
                         setAiAnalyzing(false);
+                        if (!ai) showToast("🤖 AI analysis unavailable — please fill the form manually.", T.yellow);
                         if (ai && ai.item) {
                           setAiSuggestion(ai);
                           setAiSeverity(ai.severity || "Medium");
@@ -1363,6 +1434,7 @@ export default function App() {
                         setAiAnalyzing(true); setAiSuggestion(null);
                         const ai = await analyzeHazardPhoto(f);
                         setAiAnalyzing(false);
+                        if (!ai) showToast("🤖 AI analysis unavailable — please fill the form manually.", T.yellow);
                         if (ai && ai.item) {
                           setAiSuggestion(ai);
                           setAiSeverity(ai.severity || "Medium");
@@ -1415,10 +1487,20 @@ export default function App() {
               </div>
             )}
 
-            <Btn label={sending ? "Sending..." : "Send Report →"} onClick={async () => {
+            <Btn label={sending ? tr(reportLang, "Sending...") : tr(reportLang, "Send Report →")} onClick={async () => {
               if (sending) return;
               const selectedLabels = reportIssues.map(id => ALL_ITEMS.find(s => s.id === id)?.label).filter(Boolean);
-              if (otherText.trim()) selectedLabels.push(`Other: ${otherText.trim()}`);
+              if (otherText.trim()) {
+                let customEn = otherText.trim();
+                if (reportLang !== "en") {
+                  // Translate to English for supervisors; keep the original alongside.
+                  try {
+                    const tRes = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: otherText.trim() }) });
+                    if (tRes.ok) { const tj = await tRes.json(); if (tj.english) customEn = `${tj.english} (original: ${otherText.trim()})`; }
+                  } catch (e) {}
+                }
+                selectedLabels.push(`Other: ${customEn}`);
+              }
               if (selectedLabels.length === 0) return;
               setSending(true);
 
@@ -1500,10 +1582,10 @@ export default function App() {
         ) : (
           <div style={{ textAlign: "center", padding: "48px 0" }}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>Report Sent!</h2>
-            <p style={{ color: T.muted, fontSize: 15 }}>The team has been notified and is on the way.</p>
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>{tr(reportLang, "Report Sent!")}</h2>
+            <p style={{ color: T.muted, fontSize: 15 }}>{tr(reportLang, "The team has been notified and is on the way.")}</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Btn label="Report Another Issue" onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setReportDone(false); }} variant="outline" />
+              <Btn label={tr(reportLang, "Report Another Issue")} onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
             </div>
           </div>
@@ -1657,6 +1739,52 @@ export default function App() {
       </div>
     </div>
   );
+
+  // ── LEGAL PAGES ──
+  if (screen === "terms" || screen === "privacy") {
+    const isTerms = screen === "terms";
+    return (
+      <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
+        <style>{`* { box-sizing: border-box; }`}</style>
+        <header style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "14px 24px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
+          <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>SupplyPing</span>
+          <a href="/" style={{ marginLeft: "auto", fontSize: 13, color: T.blue, textDecoration: "none", fontWeight: 500 }}>← Back to site</a>
+        </header>
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: "40px 24px", fontSize: 14, lineHeight: 1.8, color: T.muted }}>
+          <h1 style={{ fontFamily: font.display, fontSize: 32, fontWeight: 700, color: T.ink, marginBottom: 6 }}>{isTerms ? "Terms of Service" : "Privacy Policy"}</h1>
+          <p style={{ fontSize: 12, color: T.dim, marginBottom: 28 }}>SupplyPing · supplyping.com · Last updated July 2026</p>
+          {isTerms ? (
+            <>
+              <h3 style={{ color: T.ink }}>1. The Service</h3>
+              <p>SupplyPing provides QR-code-based facility issue reporting with email and SMS notifications, issue logging, and a management dashboard. SupplyPing is a notification and record-keeping tool; it does not guarantee response times and is not a substitute for a facility's own safety, maintenance, or emergency procedures.</p>
+              <h3 style={{ color: T.ink }}>2. SMS Messaging Terms</h3>
+              <p>By providing a phone number and checking the SMS consent box, you agree to receive SMS text messages from SupplyPing regarding facility hazards, operational alerts, and account notifications. Message frequency varies based on facility activity. Message and data rates may apply. Reply <b>STOP</b> to opt out at any time, or <b>HELP</b> for help. Consent is not a condition of purchase. Carriers are not liable for delayed or undelivered messages.</p>
+              <h3 style={{ color: T.ink }}>3. Accounts &amp; Acceptable Use</h3>
+              <p>You are responsible for the accuracy of contact information you provide and for maintaining the confidentiality of your login credentials. You agree not to misuse the service, including submitting false reports.</p>
+              <h3 style={{ color: T.ink }}>4. Pilot Program</h3>
+              <p>Founding pilot accounts receive the service free for 90 days. After the pilot, continued use is subject to the then-current published pricing. Either party may discontinue at any time.</p>
+              <h3 style={{ color: T.ink }}>5. Contact</h3>
+              <p>Questions: hello@supplyping.com · 313-591-3484</p>
+            </>
+          ) : (
+            <>
+              <h3 style={{ color: T.ink }}>1. What We Collect</h3>
+              <p>Account details (business name, email, industry), alert contact details (team email addresses and, if provided, mobile phone numbers with SMS consent), facility configuration (locations and areas), and issue reports (category, description, optional photo, timestamp).</p>
+              <h3 style={{ color: T.ink }}>2. Mobile Numbers &amp; SMS Consent</h3>
+              <p><b style={{ color: T.ink }}>Personal mobile numbers and SMS consent data are never shared, sold, or rented to third parties for marketing purposes.</b> Phone numbers are used solely to deliver the facility alerts and account notifications you opted into. SMS consent records are retained as required for compliance. You may opt out at any time by replying STOP.</p>
+              <h3 style={{ color: T.ink }}>3. How Information Is Used</h3>
+              <p>To deliver alerts, operate your dashboard, maintain issue records, improve the service, and communicate with you about your account. Report photos are stored to document the reported issue.</p>
+              <h3 style={{ color: T.ink }}>4. Service Providers</h3>
+              <p>We use infrastructure providers (hosting, database, email and SMS delivery) to operate the service. These providers process data only to provide their service to us and are not permitted to use it for their own marketing.</p>
+              <h3 style={{ color: T.ink }}>5. Your Choices</h3>
+              <p>You can update account details in Account Settings, opt out of SMS by replying STOP, or request deletion of your data at hello@supplyping.com.</p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return null;
 }
