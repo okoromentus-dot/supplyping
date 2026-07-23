@@ -619,9 +619,15 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== "dashboard") return;
-    const interval = setInterval(() => { fetchReports({ emails: [alertEmail, email], location }).then(data => setAlerts(data)); }, 30000);
+    // Fetch immediately whenever the tenant identifiers change (they load
+    // asynchronously after login), then keep polling. Depending on the
+    // identifiers — not just the screen — prevents the interval from
+    // capturing stale empty values in its closure.
+    const scope = { emails: [alertEmail, email], location };
+    fetchReports(scope).then(data => { setAlerts(data); setLoadingReports(false); });
+    const interval = setInterval(() => { fetchReports(scope).then(data => setAlerts(data)); }, 30000);
     return () => clearInterval(interval);
-  }, [screen]);
+  }, [screen, alertEmail, email, location]);
 
   // Offline queue sync: flush on mount and whenever connectivity returns
   useEffect(() => {
