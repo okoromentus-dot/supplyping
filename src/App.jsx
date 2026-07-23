@@ -323,20 +323,33 @@ const qr = (url, size = 130) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1A1814&bgcolor=F8F7F4&margin=8`;
 
 // ── AIRTABLE ──
-async function fetchReports() {
+// Fetch ONLY this tenant's reports. Scoping happens in the Airtable query
+// itself (filterByFormula), so other clients' data never reaches the browser.
+// scope = { emails: [alert email, login email], location: facility name }
+function buildScopeFormula(scope) {
+  const esc = (s) => String(s || "").replace(/["\\]/g, "").toLowerCase().trim();
+  const parts = [];
+  (scope?.emails || []).map(esc).filter(Boolean).forEach(e => parts.push(`LOWER({Cleaning Team Email})="${e}"`));
+  const loc = esc(scope?.location);
+  if (loc) parts.push(`LOWER({Location})="${loc}"`);
+  if (parts.length === 0) return null; // no identity → fetch nothing, never everything
+  return parts.length === 1 ? parts[0] : `OR(${parts.join(",")})`;
+}
+
+async function fetchReports(scope) {
   try {
+    const formula = buildScopeFormula(scope);
+    if (!formula) { console.warn("[Dashboard] No tenant identifiers yet — skipping fetch."); return []; }
+    const ff = `filterByFormula=${encodeURIComponent(formula)}`;
     let res = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?sort[0][field]=Created Time&sort[0][direction]=desc&maxRecords=50`,
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?${ff}&sort[0][field]=Created Time&sort[0][direction]=desc&maxRecords=50`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
     let data = await res.json();
     if (!res.ok || !data.records) {
-      // Sorted query failed (e.g. "Created Time" field renamed/missing).
-      // Log the real reason and retry without the sort so the dashboard
-      // still shows reports; sort client-side afterwards.
       console.error("[Dashboard] Sorted Airtable query failed:", res.status, data.error || data);
       res = await fetch(
-        `https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?maxRecords=50`,
+        `https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?${ff}&maxRecords=50`,
         { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
       );
       data = await res.json();
@@ -381,12 +394,21 @@ async function submitReportToAirtable(fields) {
 
 async function resolveInAirtable(id) {
   try {
-    await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
       method: "PATCH",
       headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ fields: { "Resolved": true } })
     });
-  } catch (e) {}
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("[Resolve] Airtable PATCH failed:", res.status, err.error || err);
+      return { ok: false, error: (err.error && (err.error.message || err.error.type)) || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[Resolve] Network error:", e);
+    return { ok: false, error: "Network error" };
+  }
 }
 
 // ── LOCATION PERSISTENCE (Clients table → "Locations" Long-text field) ──
@@ -551,29 +573,22 @@ export default function App() {
   // Scope reports to THIS client: match one of their location names, or
   // alerts addressed to their team/login email. (Without this every client
   // would see every other client's reports.)
-  // Scope reports to THIS client. Their facility name is `location` (string)
-  // and their areas are `rooms` — there is no `locations` state (the previous
-  // reference to it crashed the app at render).
-  const myLoc = String(location || "").toLowerCase().trim();
-  const roomNames = (rooms || []).map(r => (r.name || "").toLowerCase().trim()).filter(Boolean);
-  const myEmails = [String(alertEmail || "").toLowerCase().trim(), String(email || "").toLowerCase().trim()].filter(Boolean);
-  const mine = alerts.filter(a => {
-    const aloc = (a.location || "").toLowerCase().trim();
-    const aroom = (a.room || "").toLowerCase().trim();
-    const amail = (a.cleaningEmail || "").toLowerCase().trim();
-    if (aloc && myLoc && aloc === myLoc) return true;
-    if (aroom && roomNames.includes(aroom)) return true;
-    if (amail && myEmails.includes(amail)) return true;
-    // Rows with no identifying info: show them so nothing is silently lost
-    return !aloc && !amail;
-  });
-  const open = mine.filter(a => !a.resolved);
-  const resolved = mine.filter(a => a.resolved);
+  // Reports arrive already tenant-scoped from fetchReports (server-side
+  // filterByFormula) — no client-side filtering needed.
+  const open = alerts.filter(a => !a.resolved);
+  const resolved = alerts.filter(a => a.resolved);
 
   const resolve = async (id) => {
     const item = alerts.find(a => a.id === id);
     setAlerts(p => p.map(a => a.id === id ? { ...a, resolved: true } : a));
-    await resolveInAirtable(id);
+    const result = await resolveInAirtable(id);
+    if (!result.ok) {
+      // Persistence failed — revert the optimistic update and say why,
+      // otherwise the "resolved" state silently reappears on next login.
+      setAlerts(p => p.map(a => a.id === id ? { ...a, resolved: false } : a));
+      showToast(`❌ Couldn't save resolve: ${result.error}. Check the "Resolved" field (checkbox type) in Airtable.`, T.red);
+      return;
+    }
     // Notify the team + management that the issue is closed
     if (item) {
       const recipients = [item.cleaningEmail, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
@@ -598,13 +613,13 @@ export default function App() {
     setAuthLoading(false);
     if (s === "dashboard") {
       setLoadingReports(true);
-      fetchReports().then(data => { setAlerts(data); setLoadingReports(false); });
+      fetchReports({ emails: [alertEmail, email], location }).then(data => { setAlerts(data); setLoadingReports(false); });
     }
   };
 
   useEffect(() => {
     if (screen !== "dashboard") return;
-    const interval = setInterval(() => { fetchReports().then(data => setAlerts(data)); }, 30000);
+    const interval = setInterval(() => { fetchReports({ emails: [alertEmail, email], location }).then(data => setAlerts(data)); }, 30000);
     return () => clearInterval(interval);
   }, [screen]);
 
@@ -1130,7 +1145,7 @@ export default function App() {
           <Btn label="📋 Status" onClick={() => nav("status")} variant="outline" size="sm" />
           <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
           <Btn label="⚙️ Account" onClick={() => nav("account")} variant="outline" size="sm" />
-          <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports().then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
+          <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports({ emails: [alertEmail, email], location }).then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
