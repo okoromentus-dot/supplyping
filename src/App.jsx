@@ -551,13 +551,20 @@ export default function App() {
   // Scope reports to THIS client: match one of their location names, or
   // alerts addressed to their team/login email. (Without this every client
   // would see every other client's reports.)
-  const locNames = (locations || []).map(l => (l.name || "").toLowerCase().trim()).filter(Boolean);
+  // Scope reports to THIS client. Their facility name is `location` (string)
+  // and their areas are `rooms` — there is no `locations` state (the previous
+  // reference to it crashed the app at render).
+  const myLoc = String(location || "").toLowerCase().trim();
+  const roomNames = (rooms || []).map(r => (r.name || "").toLowerCase().trim()).filter(Boolean);
+  const myEmails = [String(alertEmail || "").toLowerCase().trim(), String(email || "").toLowerCase().trim()].filter(Boolean);
   const mine = alerts.filter(a => {
     const aloc = (a.location || "").toLowerCase().trim();
+    const aroom = (a.room || "").toLowerCase().trim();
     const amail = (a.cleaningEmail || "").toLowerCase().trim();
-    if (aloc && locNames.includes(aloc)) return true;
-    if (amail && [String(alertEmail || "").toLowerCase(), String(email || "").toLowerCase()].includes(amail)) return true;
-    // Legacy/test rows with no location and no email: show them so nothing is lost
+    if (aloc && myLoc && aloc === myLoc) return true;
+    if (aroom && roomNames.includes(aroom)) return true;
+    if (amail && myEmails.includes(amail)) return true;
+    // Rows with no identifying info: show them so nothing is silently lost
     return !aloc && !amail;
   });
   const open = mine.filter(a => !a.resolved);
