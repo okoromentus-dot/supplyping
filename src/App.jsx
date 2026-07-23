@@ -325,11 +325,27 @@ const qr = (url, size = 130) =>
 // ── AIRTABLE ──
 async function fetchReports() {
   try {
-    const res = await fetch(
+    let res = await fetch(
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?sort[0][field]=Created Time&sort[0][direction]=desc&maxRecords=50`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
-    const data = await res.json();
+    let data = await res.json();
+    if (!res.ok || !data.records) {
+      // Sorted query failed (e.g. "Created Time" field renamed/missing).
+      // Log the real reason and retry without the sort so the dashboard
+      // still shows reports; sort client-side afterwards.
+      console.error("[Dashboard] Sorted Airtable query failed:", res.status, data.error || data);
+      res = await fetch(
+        `https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?maxRecords=50`,
+        { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
+      );
+      data = await res.json();
+      if (!res.ok || !data.records) {
+        console.error("[Dashboard] Airtable read failed entirely:", res.status, data.error || data);
+        return [];
+      }
+      data.records.sort((a, b) => new Date(b.fields["Reported At"] || b.fields["Created Time"] || 0) - new Date(a.fields["Reported At"] || a.fields["Created Time"] || 0));
+    }
     if (!data.records) return [];
     return data.records.map(r => {
       const status = r.fields["Status"] || "";
@@ -532,8 +548,20 @@ export default function App() {
 
   const showToast = (msg, color) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
   const totalQRs = rooms.reduce((s, r) => s + Number(r.stalls || 0), 0);
-  const open = alerts.filter(a => !a.resolved);
-  const resolved = alerts.filter(a => a.resolved);
+  // Scope reports to THIS client: match one of their location names, or
+  // alerts addressed to their team/login email. (Without this every client
+  // would see every other client's reports.)
+  const locNames = (locations || []).map(l => (l.name || "").toLowerCase().trim()).filter(Boolean);
+  const mine = alerts.filter(a => {
+    const aloc = (a.location || "").toLowerCase().trim();
+    const amail = (a.cleaningEmail || "").toLowerCase().trim();
+    if (aloc && locNames.includes(aloc)) return true;
+    if (amail && [String(alertEmail || "").toLowerCase(), String(email || "").toLowerCase()].includes(amail)) return true;
+    // Legacy/test rows with no location and no email: show them so nothing is lost
+    return !aloc && !amail;
+  });
+  const open = mine.filter(a => !a.resolved);
+  const resolved = mine.filter(a => a.resolved);
 
   const resolve = async (id) => {
     const item = alerts.find(a => a.id === id);
