@@ -329,9 +329,12 @@ const qr = (url, size = 130) =>
 function buildScopeFormula(scope) {
   const esc = (s) => String(s || "").replace(/["\\]/g, "").toLowerCase().trim();
   const parts = [];
-  (scope?.emails || []).map(esc).filter(Boolean).forEach(e => parts.push(`LOWER({Cleaning Team Email})="${e}"`));
+  (scope?.emails || []).map(esc).filter(Boolean).forEach(e => parts.push(`LOWER(TRIM({Cleaning Team Email}))="${e}"`));
   const loc = esc(scope?.location);
-  if (loc) parts.push(`LOWER({Location})="${loc}"`);
+  if (loc) parts.push(`LOWER(TRIM({Location}))="${loc}"`);
+  // Room names persist reliably in the client's Locations JSON, so they're the
+  // most dependable tenant key even when profile fields are blank.
+  (scope?.rooms || []).map(esc).filter(Boolean).slice(0, 20).forEach(r => parts.push(`LOWER(TRIM({Room}))="${r}"`));
   if (parts.length === 0) return null; // no identity → fetch nothing, never everything
   return parts.length === 1 ? parts[0] : `OR(${parts.join(",")})`;
 }
@@ -360,6 +363,15 @@ async function fetchReports(scope) {
       data.records.sort((a, b) => new Date(b.fields["Reported At"] || b.fields["Created Time"] || 0) - new Date(a.fields["Reported At"] || a.fields["Created Time"] || 0));
     }
     if (!data.records) return [];
+    if (data.records.length === 0) {
+      // Nothing matched the scope — log a sample of actual rows so the
+      // mismatch (Location/Room/Email differences) is visible, not mysterious.
+      try {
+        const dbg = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?maxRecords=3&sort[0][field]=Created Time&sort[0][direction]=desc`, { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } });
+        const dj = await dbg.json();
+        console.warn("[Dashboard] Scoped query matched 0 rows. Scope:", scope, "Latest rows in table:", (dj.records || []).map(r => ({ Location: r.fields["Location"], Room: r.fields["Room"], CleaningTeamEmail: r.fields["Cleaning Team Email"] })));
+      } catch (e) {}
+    }
     return data.records.map(r => {
       const status = r.fields["Status"] || "";
       const supply = ALL_ITEMS.find(s => status.includes(s.label)) || { emoji: "📋", label: status || "Issue", color: T.orange, bg: T.orangeLight, border: T.orangeBorder, id: "general" };
@@ -595,7 +607,8 @@ export default function App() {
       sendOrQueueAlert({
         cleaning_email: recipients, to_email: recipients, email: recipients,
         issue: `✅ RESOLVED: ${item.status || item.supply.label}`,
-        location: item.location || "", room: item.room, stall: item.stall,
+        location: item.location || "",
+        location_name: item.location || "", room: item.room, stall: item.stall,
         business: bizName || email, time: new Date().toLocaleString(),
       });
     }
@@ -613,7 +626,7 @@ export default function App() {
     setAuthLoading(false);
     if (s === "dashboard") {
       setLoadingReports(true);
-      fetchReports({ emails: [alertEmail, email], location }).then(data => { setAlerts(data); setLoadingReports(false); });
+      fetchReports({ emails: [alertEmail, email], location, rooms: (rooms || []).map(r => r.name) }).then(data => { setAlerts(data); setLoadingReports(false); });
     }
   };
 
@@ -623,11 +636,11 @@ export default function App() {
     // asynchronously after login), then keep polling. Depending on the
     // identifiers — not just the screen — prevents the interval from
     // capturing stale empty values in its closure.
-    const scope = { emails: [alertEmail, email], location };
+    const scope = { emails: [alertEmail, email], location, rooms: (rooms || []).map(r => r.name) };
     fetchReports(scope).then(data => { setAlerts(data); setLoadingReports(false); });
     const interval = setInterval(() => { fetchReports(scope).then(data => setAlerts(data)); }, 30000);
     return () => clearInterval(interval);
-  }, [screen, alertEmail, email, location]);
+  }, [screen, alertEmail, email, location, rooms]);
 
   // Offline queue sync: flush on mount and whenever connectivity returns
   useEffect(() => {
@@ -676,6 +689,7 @@ export default function App() {
       email: recipients,
       issue: "🧻 No Toilet Paper (TEST ALERT)",
       location: location || "Test Location",
+      location_name: location || "Test Location",
       room: "Test Room",
       stall: "Stall 1",
       business: bizName || "Your Business",
@@ -1151,7 +1165,7 @@ export default function App() {
           <Btn label="📋 Status" onClick={() => nav("status")} variant="outline" size="sm" />
           <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
           <Btn label="⚙️ Account" onClick={() => nav("account")} variant="outline" size="sm" />
-          <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports({ emails: [alertEmail, email], location }).then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
+          <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports({ emails: [alertEmail, email], location, rooms: (rooms || []).map(r => r.name) }).then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
@@ -1593,7 +1607,10 @@ export default function App() {
                   cleaningEmail = data?.user?.email || "";
                 } catch (e) {}
               }
-              const locName = qrLocation || p.get("l") || "Unknown Location";
+              // Location fallback chain: QR's l= param → logged-in facility name →
+              // the QR's business name (old QRs printed before a facility name was
+              // saved carry b= but no l=) → last resort label.
+              const locName = qrLocation || p.get("l") || location || qrBusiness || p.get("b") || "Unlisted Location";
               const roomName = qrRoom || p.get("r") || "Unknown Room";
               const stallNum = qrStall || p.get("s") || "1";
               const biz = qrBusiness || p.get("b") || "SupplyPing";
@@ -1625,6 +1642,7 @@ export default function App() {
                 cleaning_email: recipients,
                 to_email: recipients,
                 email: recipients,
+                location_name: locName,
                 issue: [
                   issueString,
                   aiSeverity ? `Severity: ${aiSeverity}` : "",
