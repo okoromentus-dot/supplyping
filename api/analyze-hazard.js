@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { image, mediaType } = req.body || {};
+    const { image, mediaType, lang } = req.body || {};
     if (!image) return res.status(400).json({ error: "No image provided" });
 
     const prompt = `You are a facility safety triage assistant. Look at this photo from a workplace facility and classify the issue.
@@ -43,7 +43,7 @@ Choose the single best match from this exact list of issue types:
 ${ITEMS.map((i) => `- ${i}`).join("\n")}
 
 Respond with ONLY a JSON object, no other text, in this shape:
-{"item": "<exact issue type from the list>", "severity": "Low" | "Medium" | "High", "description": "<one or two factual sentences describing what is visible and where the concern is. Plain language, no speculation beyond what is visible.>", "confident": true | false}
+{"item": "<exact issue type from the list>", "severity": "Low" | "Medium" | "High", "description": "<one or two factual sentences in ENGLISH describing what is visible and where the concern is. Plain language, no speculation beyond what is visible.>", "description_local": ${lang && lang !== "en" ? `"<the same description translated into the language with code '${String(lang).slice(0,5)}'>"` : "null"}, "confident": true | false}
 
 Severity guide: High = immediate injury risk or blocked emergency egress. Medium = should be addressed today. Low = routine.
 If the photo does not clearly show a facility issue, set "confident": false and pick the closest plausible item.`;
@@ -85,6 +85,7 @@ If the photo does not clearly show a facility issue, set "confident": false and 
     if (!ITEMS.includes(parsed.item)) parsed.item = null;
     if (!["Low", "Medium", "High"].includes(parsed.severity)) parsed.severity = "Medium";
     parsed.description = String(parsed.description || "").slice(0, 400);
+    parsed.description_local = parsed.description_local ? String(parsed.description_local).slice(0, 400) : null;
 
     return res.status(200).json(parsed);
   } catch (e) {
