@@ -659,6 +659,39 @@ export default function App() {
     }
   };
 
+  // Restore an existing login on page load. Without this a refresh drops the
+  // user back to the landing page even though their Supabase session is still
+  // valid — it looked like being logged out, but the session was never checked.
+  useEffect(() => {
+    let cancelled = false;
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash || "";
+    // Never hijack QR report links, password reset, or the legal pages.
+    const isPublicFlow =
+      path === "/r" || path.startsWith("/r/") || params.has("ce") || params.has("l") ||
+      path === "/reset" || path === "/terms" || path === "/privacy" ||
+      hash.includes("type=recovery");
+    if (isPublicFlow) return;
+
+    supabase.auth.getSession().then(async ({ data }) => {
+      const sessionEmail = data?.session?.user?.email;
+      if (!sessionEmail || cancelled) return;
+      setEmail(sessionEmail);
+      const profile = await loadClientData(sessionEmail);
+      if (cancelled) return;
+      if (profile) {
+        if (profile.bizName) setBizName(profile.bizName);
+        if (profile.facility) setLocation(profile.facility);
+        if (profile.cleaningEmail) setAlertEmail(profile.cleaningEmail);
+        if (profile.phone) setAlertPhone(profile.phone);
+        if (profile.rooms) setRooms(profile.rooms);
+      }
+      setScreen("dashboard");
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     if (screen !== "dashboard") return;
     const scope = { emails: [alertEmail, email], location, rooms: (rooms || []).map(r => r.name) };
