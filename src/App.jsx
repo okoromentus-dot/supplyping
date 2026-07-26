@@ -452,16 +452,25 @@ async function resolveInAirtable(id) {
 }
 
 // ── LOCATION PERSISTENCE (Clients table → "Locations" Long-text field) ──
+// Email matching must be case- and whitespace-insensitive. An exact match
+// silently fails when capitalization differs, which made the save path create
+// duplicate rows and the load path find nothing — the profile appeared to vanish.
+function clientEmailFormula(email) {
+  const clean = String(email || "").toLowerCase().trim().replace(/["\\]/g, "");
+  return `LOWER(TRIM({Email}))="${clean}"`;
+}
+
 async function findClientRecordId(email) {
   if (!email) return null;
   try {
     const res = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`,
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(clientEmailFormula(email))}`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
     const data = await res.json();
+    if (!res.ok) { console.error("[Airtable] Client lookup failed:", res.status, JSON.stringify(data.error || data)); return null; }
     return data.records && data.records.length > 0 ? data.records[0].id : null;
-  } catch (e) { return null; }
+  } catch (e) { console.error("[Airtable] Client lookup error:", e); return null; }
 }
 
 // Writes the client profile. Airtable rejects the ENTIRE row for one bad field
@@ -533,11 +542,16 @@ async function loadClientData(email) {
   if (!email) return null;
   try {
     const res = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(`{Email}="${email}"`)}`,
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(clientEmailFormula(email))}`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
     const data = await res.json();
-    if (!data.records || data.records.length === 0) return null;
+    if (!res.ok) { console.error("[Profile] Airtable read failed:", res.status, JSON.stringify(data.error || data)); return null; }
+    if (!data.records || data.records.length === 0) {
+      console.warn(`[Profile] No Clients row found for "${email}" — the onboarding write was likely rejected. Nothing to restore.`);
+      return null;
+    }
+    console.log(`[Profile] Loaded row for "${email}" — Facility Name:`, JSON.stringify(data.records[0].fields["Facility Name"] || "(blank)"));
     const f = data.records[0].fields;
     let rooms = null;
     if (f["Locations"]) { try { rooms = JSON.parse(f["Locations"]); } catch (e) { rooms = null; } }
