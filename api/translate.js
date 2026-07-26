@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const key = process.env.ANTHROPIC_API_KEY || process.env.ANTHROLIC_API_KEY;
+  const key = process.env.ANTHROPIC_API_KEY;
   if (!key) { console.error("[translate] No API key configured"); return res.status(500).json({ error: "API key not configured" }); }
 
   try {

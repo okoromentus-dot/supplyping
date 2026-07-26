@@ -9,8 +9,8 @@ const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
 // Build marker — bump when triggering redeploys; visible in browser console.
-const BUILD_VERSION = "2026-07-22-ai-diagnostics-1";
-try { console.log(`[SupplyPing] build ${BUILD_VERSION} — AI diagnostics active`); } catch (e) {}
+const BUILD_VERSION = "2026-07-26-schema-aligned";
+try { console.log(`[SupplyPing] build ${BUILD_VERSION} — schema aligned`); } catch (e) {}
 
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
@@ -411,11 +411,21 @@ async function submitReportToAirtable(fields) {
 
 async function resolveInAirtable(id) {
   try {
-    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
+    // Resolving returns the room to normal operation. Bathroom Status is sent
+    // alongside Resolved; if that field is absent the retry below still saves
+    // the resolution itself so a fix is never lost to a schema mismatch.
+    let res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
       method: "PATCH",
       headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ fields: { "Resolved": true } })
+      body: JSON.stringify({ fields: { "Resolved": true, "Bathroom Status": "Open" } })
     });
+    if (!res.ok) {
+      res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
+        method: "PATCH",
+        headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { "Resolved": true } })
+      });
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error("[Resolve] Airtable PATCH failed:", res.status, err.error || err);
@@ -1690,6 +1700,12 @@ export default function App() {
               const extendedFields = { ...reportFields };
               if (aiSeverity) extendedFields["Severity"] = aiSeverity;
               if (aiDescEn) extendedFields["Details"] = aiDescEn;
+              // Bathroom Status = high-level operational state of the room,
+              // distinct from Status (the specific issue). Restroom/cleaning
+              // issues take the room out of service; everything else flags it.
+              const restroomIds = ["restroomclean", "tp", "soap", "towels", "sanitizer", "spillclean", "trash"];
+              const isRestroomIssue = reportIssues.some(id => restroomIds.includes(id));
+              extendedFields["Bathroom Status"] = isRestroomIssue ? "Closed for Maintenance" : "Needs Attention";
               const ok = await submitReportToAirtable(extendedFields);
               if (!ok) await submitReportToAirtable(reportFields);
 

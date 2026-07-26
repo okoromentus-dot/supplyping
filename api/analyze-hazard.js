@@ -25,9 +25,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  // Accept the correct name and the common typo, so a misnamed env var
-  // doesn't take the feature down.
-  const key = process.env.ANTHROPIC_API_KEY || process.env.ANTHROLIC_API_KEY;
+  const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     console.error("[analyze-hazard] No API key found. Env vars present:", Object.keys(process.env).filter(k => k.includes("ANTH")).join(", ") || "none matching ANTH*");
     return res.status(500).json({ error: "API key not configured in Vercel. Add ANTHROPIC_API_KEY in Project Settings → Environment Variables, then redeploy." });
