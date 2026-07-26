@@ -398,15 +398,28 @@ async function fetchReports(scope) {
   } catch (e) { return []; }
 }
 
-async function submitReportToAirtable(fields) {
+async function submitReportToAirtable(fields, attemptLabel = "write") {
   try {
     const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ fields })
     });
-    return res.ok;
-  } catch (e) { console.log("Airtable submit error:", e); return false; }
+    if (!res.ok) {
+      // Airtable rejects the WHOLE row for one bad field (unknown name, or a
+      // single-select value that isn't a configured option). Log the exact
+      // reason — a silent failure here looks identical to an empty dashboard.
+      const err = await res.json().catch(() => ({}));
+      console.error(`[Airtable] REJECTED attempt "${attemptLabel}" —`, res.status,
+        JSON.stringify(err.error || err),
+        "| fields sent:", JSON.stringify(Object.keys(fields)),
+        "| values:", JSON.stringify(fields));
+      return false;
+    }
+    const saved = await res.json().catch(() => ({}));
+    console.log(`[Airtable] Row created ✓ via "${attemptLabel}" — id:`, saved.id || "(unknown)");
+    return true;
+  } catch (e) { console.error("[Airtable] Network error on report write:", e); return false; }
 }
 
 async function resolveInAirtable(id) {
@@ -1682,6 +1695,19 @@ export default function App() {
               const locName = qrLocation || p.get("l") || location || qrBusiness || p.get("b") || "Unlisted Location";
               const roomName = qrRoom || p.get("r") || "Unknown Room";
               const stallNum = qrStall || p.get("s") || "1";
+
+              // Diagnostic: shows every source the location is drawn from, in
+              // priority order, so an "Unlisted Location" result immediately
+              // reveals WHICH source was empty rather than guessing.
+              console.log("[Report] location sources →", JSON.stringify({
+                qrLocation_state: qrLocation || "(empty)",
+                url_param_l: p.get("l") || "(empty)",
+                account_facility_name: location || "(empty)",
+                qrBusiness_state: qrBusiness || "(empty)",
+                url_param_b: p.get("b") || "(empty)",
+                RESOLVED_locName: locName,
+                full_scanned_url: window.location.href,
+              }));
               const biz = qrBusiness || p.get("b") || "SupplyPing";
 
               // 1) Airtable sync
@@ -1706,8 +1732,21 @@ export default function App() {
               const restroomIds = ["restroomclean", "tp", "soap", "towels", "sanitizer", "spillclean", "trash"];
               const isRestroomIssue = reportIssues.some(id => restroomIds.includes(id));
               extendedFields["Bathroom Status"] = isRestroomIssue ? "Closed for Maintenance" : "Needs Attention";
-              const ok = await submitReportToAirtable(extendedFields);
-              if (!ok) await submitReportToAirtable(reportFields);
+              // Progressive fallback: a report must never be lost to one bad
+              // field. Try full → base → bare-minimum, logging each attempt so
+              // the offending field is named in the console.
+              let saved = await submitReportToAirtable(extendedFields, "full (with Severity/Details/Bathroom Status)");
+              if (!saved) saved = await submitReportToAirtable(reportFields, "base (core fields + Photo)");
+              if (!saved) {
+                const minimal = {
+                  "Location": locName,
+                  "Room": roomName,
+                  "Status": issueString,
+                  "Cleaning Team Email": cleaningEmail,
+                };
+                saved = await submitReportToAirtable(minimal, "minimal (4 text fields only)");
+              }
+              if (!saved) showToast("⚠️ Alert sent, but the dashboard record failed to save — check console.", T.yellow);
 
               // 2) EmailJS alert (or offline queue).
               // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
