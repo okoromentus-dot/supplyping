@@ -565,6 +565,7 @@ export default function App() {
   const [aiSeverity, setAiSeverity] = useState("");
   const [aiDescription, setAiDescription] = useState("");
   const [reportLang, setReportLang] = useState("en");
+  const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
   const [listening, setListening] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -634,15 +635,40 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== "dashboard") return;
-    // Fetch immediately whenever the tenant identifiers change (they load
-    // asynchronously after login), then keep polling. Depending on the
-    // identifiers — not just the screen — prevents the interval from
-    // capturing stale empty values in its closure.
     const scope = { emails: [alertEmail, email], location, rooms: (rooms || []).map(r => r.name) };
     fetchReports(scope).then(data => { setAlerts(data); setLoadingReports(false); });
     const interval = setInterval(() => { fetchReports(scope).then(data => setAlerts(data)); }, 30000);
     return () => clearInterval(interval);
   }, [screen, alertEmail, email, location, rooms]);
+
+  // 14-day trial countdown — based on the account's REAL Supabase signup
+  // timestamp, not a stored guess, so it can't drift or be reset by accident.
+  useEffect(() => {
+    if (screen !== "dashboard") return;
+    supabase.auth.getUser().then(({ data }) => {
+      const createdAt = data?.user?.created_at;
+      if (!createdAt) { setTrialDaysLeft(null); return; }
+      const signedUp = new Date(createdAt);
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const elapsed = Math.floor((Date.now() - signedUp.getTime()) / msPerDay);
+      const left = Math.max(0, 14 - elapsed);
+      setTrialDaysLeft(left);
+
+      // Notify YOU (management) once per client, at day-3-left and at expiry,
+      // so a pilot never silently lapses without a founder follow-up call.
+      // De-duped via localStorage so the 30s dashboard refresh doesn't spam.
+      const dedupeKey = `sp_trial_notice_${data.user.email}_${left <= 3 ? left : "na"}`;
+      if ((left === 3 || left === 0) && !localStorage.getItem(dedupeKey)) {
+        localStorage.setItem(dedupeKey, "1");
+        sendOrQueueAlert({
+          cleaning_email: MANAGEMENT_EMAIL, to_email: MANAGEMENT_EMAIL, email: MANAGEMENT_EMAIL,
+          issue: left === 0 ? `⏰ TRIAL ENDED: ${bizName || data.user.email}` : `⏰ Trial ending in 3 days: ${bizName || data.user.email}`,
+          location: location || "", room: "", stall: "",
+          business: bizName || data.user.email, time: new Date().toLocaleString(),
+        });
+      }
+    }).catch(() => setTrialDaysLeft(null));
+  }, [screen]);
 
   // Offline queue sync: flush on mount and whenever connectivity returns
   useEffect(() => {
@@ -729,7 +755,7 @@ export default function App() {
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 64px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
-          Free 90-Day Pilot — Built for Warehouses & High-Traffic Facilities
+          Free 14-Day Pilot — Built for Warehouses & High-Traffic Facilities
         </div>
         <h1 style={{ fontFamily: font.display, fontSize: 56, fontWeight: 700, margin: "0 0 24px", letterSpacing: -2.5, lineHeight: 1.05 }}>
           See it. Scan it.<br />Solve it. <span style={{ color: T.orange }}>⚠️</span>
@@ -800,7 +826,7 @@ export default function App() {
           <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 8px", letterSpacing: -1.2 }}>Simple, honest pricing.</h2>
           <p style={{ color: T.muted, fontSize: 15, marginBottom: 16 }}>No credit card required.</p>
           <div style={{ background: T.greenLight, border: `1.5px solid ${T.greenBorder}`, borderRadius: 12, padding: "14px 20px", marginBottom: 36, fontSize: 14, color: T.green, fontWeight: 600, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>
-            🎉 Founding Pilot: every plan is <b>FREE for your first 90 days</b>. All we ask is your honest feedback.
+            🎉 Founding Pilot: every plan is <b>FREE for your first 14 days</b>. All we ask is your honest feedback.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             {[
@@ -873,7 +899,7 @@ export default function App() {
           Ready to streamline<br />your facility operations?
         </h2>
         <p style={{ color: "#888", fontSize: 16, marginBottom: 36, maxWidth: 480, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
-          Free for 90 days. Set up in 10 minutes. No credit card required.
+          Free for 14 days. Set up in 10 minutes. No credit card required.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="orange" size="lg" />
@@ -908,7 +934,7 @@ export default function App() {
           <span style={{ color: T.muted, fontSize: 12 }}>← Back</span>
         </div>
         <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Create your account</h2>
-        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 90-day pilot. No credit card required.</p>
+        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 14-day pilot. No credit card required.</p>
         <Card>
           <Input label="Business Name" value={bizName} onChange={setBizName} placeholder="Evans Distribution" />
           <Input label="Work Email" value={email} onChange={setEmail} placeholder="you@yourbusiness.com" type="email" />
@@ -1163,6 +1189,20 @@ export default function App() {
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
+        {trialDaysLeft !== null && (
+          <div style={{
+            fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 100,
+            background: trialDaysLeft === 0 ? T.redLight : trialDaysLeft <= 3 ? T.yellowLight : T.greenLight,
+            color: trialDaysLeft === 0 ? T.red : trialDaysLeft <= 3 ? T.yellow : T.green,
+            border: `1px solid ${trialDaysLeft === 0 ? T.redBorder : trialDaysLeft <= 3 ? "#FDE68A" : T.greenBorder}`,
+          }}>
+            {trialDaysLeft === 0
+              ? "⏰ Trial ended — contact us to continue"
+              : trialDaysLeft === 1
+              ? "⏰ Last day of your free trial"
+              : `🎉 ${trialDaysLeft} days left in your free trial`}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 0" }}>
           <Btn label="📋 Status" onClick={() => nav("status")} variant="outline" size="sm" />
           <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
@@ -1252,7 +1292,7 @@ export default function App() {
         <Card style={{ marginTop: 28 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>💬 Founding Pilot Feedback</div>
           <p style={{ fontSize: 13, color: T.muted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Your plan is free for 90 days — all we ask is your honest feedback. What's working? What's missing? What would make this a must-have?
+            Your plan is free for 14 days — all we ask is your honest feedback. What's working? What's missing? What would make this a must-have?
           </p>
           {feedbackSent ? (
             <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: T.green, fontWeight: 500 }}>
@@ -1867,7 +1907,7 @@ export default function App() {
               <h3 style={{ color: T.ink }}>3. Accounts &amp; Acceptable Use</h3>
               <p>You are responsible for the accuracy of contact information you provide and for maintaining the confidentiality of your login credentials. You agree not to misuse the service, including submitting false reports.</p>
               <h3 style={{ color: T.ink }}>4. Pilot Program</h3>
-              <p>Founding pilot accounts receive the service free for 90 days. After the pilot, continued use is subject to the then-current published pricing. Either party may discontinue at any time.</p>
+              <p>Founding pilot accounts receive the service free for 14 days. After the pilot, continued use is subject to the then-current published pricing. Either party may discontinue at any time.</p>
               <h3 style={{ color: T.ink }}>5. Contact</h3>
               <p>Questions: hello@supplyping.com · 313-591-3484</p>
             </>
