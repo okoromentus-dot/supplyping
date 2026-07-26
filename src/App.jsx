@@ -464,25 +464,69 @@ async function findClientRecordId(email) {
   } catch (e) { return null; }
 }
 
+// Writes the client profile. Airtable rejects the ENTIRE row for one bad field
+// (unknown name, or a single-select value that isn't a configured option), so a
+// silent failure here means the client's setup vanishes on their next login.
+// Strategy: verify the response, and if the full write is rejected, retry with
+// only the fields the app actually needs to restore a session.
+async function writeClientFields(email, fields, label) {
+  const recordId = await findClientRecordId(email);
+  const url = recordId
+    ? `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${recordId}`
+    : `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients`;
+  const body = recordId ? { fields } : { fields: { "Email": email, ...fields } };
+  const res = await fetch(url, {
+    method: recordId ? "PATCH" : "POST",
+    headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error(`[Airtable] Client profile REJECTED (${label}) —`, res.status,
+      JSON.stringify(err.error || err), "| fields sent:", JSON.stringify(Object.keys(body.fields)));
+    return false;
+  }
+  console.log(`[Airtable] Client profile saved ✓ (${label})`);
+  return true;
+}
+
 async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
-  if (!email) return;
+  if (!email) return false;
   const fields = { "Locations": JSON.stringify(roomsArray || []), ...extra };
   try {
-    const recordId = await findClientRecordId(email);
-    if (recordId) {
-      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${recordId}`, {
-        method: "PATCH",
-        headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ fields })
-      });
-    } else {
-      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: { "Email": email, ...fields } })
-      });
+    // Attempt 1: everything.
+    if (await writeClientFields(email, fields, "full profile")) return true;
+
+    // Attempt 2: only what a session restore genuinely requires. Drops the
+    // likely offenders (Plan / Client Status / Industry single-selects).
+    const essential = {};
+    for (const k of ["Locations", "Facility Name", "Cleaning Team Email", "Business Name", "Phone Number"]) {
+      if (fields[k] !== undefined) essential[k] = fields[k];
     }
-  } catch (e) { console.log("Save locations error:", e); }
+    if (await writeClientFields(email, essential, "essential fields only")) return true;
+
+    // Attempt 3: the absolute minimum that keeps the dashboard working.
+    const minimal = {};
+    for (const k of ["Locations", "Facility Name", "Cleaning Team Email"]) {
+      if (fields[k] !== undefined) minimal[k] = fields[k];
+    }
+    return await writeClientFields(email, minimal, "minimal (locations + facility + email)");
+  } catch (e) {
+    console.error("[Airtable] Client profile network error:", e);
+    return false;
+  }
+}
+
+// Local profile backup — a fallback for session restore when the Airtable
+// write was rejected. Never the source of truth; Airtable always wins.
+function saveProfileBackup(email, profile) {
+  try { localStorage.setItem(`sp_profile_${String(email).toLowerCase()}`, JSON.stringify(profile)); } catch (e) {}
+}
+function loadProfileBackup(email) {
+  try {
+    const raw = localStorage.getItem(`sp_profile_${String(email).toLowerCase()}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
 }
 
 async function loadClientData(email) {
@@ -680,13 +724,20 @@ export default function App() {
       setEmail(sessionEmail);
       const profile = await loadClientData(sessionEmail);
       if (cancelled) return;
-      if (profile) {
-        if (profile.bizName) setBizName(profile.bizName);
-        if (profile.facility) setLocation(profile.facility);
-        if (profile.cleaningEmail) setAlertEmail(profile.cleaningEmail);
-        if (profile.phone) setAlertPhone(profile.phone);
-        if (profile.rooms) setRooms(profile.rooms);
-      }
+      const backup = loadProfileBackup(sessionEmail);
+      // Airtable is the source of truth; the local backup only fills gaps it
+      // left behind (e.g. a rejected write during onboarding).
+      const biz = profile?.bizName || backup?.bizName;
+      const fac = profile?.facility || backup?.location;
+      const ce = profile?.cleaningEmail || backup?.alertEmail;
+      const ph = profile?.phone || backup?.alertPhone;
+      const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
+      if (biz) setBizName(biz);
+      if (fac) setLocation(fac);
+      if (ce) setAlertEmail(ce);
+      if (ph) setAlertPhone(ph);
+      if (rms) setRooms(rms);
+      if (!fac) console.warn("[Restore] No Facility Name found in Airtable or local backup for", sessionEmail);
       setScreen("dashboard");
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -1056,12 +1107,21 @@ export default function App() {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) { setAuthLoading(false); setAuthError("Invalid email or password. Please try again."); return; }
             const profile = await loadClientData(email);
-            if (profile) {
-              if (profile.bizName) setBizName(profile.bizName);
-              if (profile.facility) setLocation(profile.facility);
-              if (profile.cleaningEmail) setAlertEmail(profile.cleaningEmail);
-              if (profile.phone) setAlertPhone(profile.phone);
-              if (profile.rooms) setRooms(profile.rooms);
+            const backup = loadProfileBackup(email);
+            const biz = profile?.bizName || backup?.bizName;
+            const fac = profile?.facility || backup?.location;
+            const ce = profile?.cleaningEmail || backup?.alertEmail;
+            const ph = profile?.phone || backup?.alertPhone;
+            const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
+            if (biz) setBizName(biz);
+            if (fac) setLocation(fac);
+            if (ce) setAlertEmail(ce);
+            if (ph) setAlertPhone(ph);
+            if (rms) setRooms(rms);
+            // If Airtable had no facility but the local backup did, the earlier
+            // write was rejected — repair it now that we're authenticated.
+            if (!profile?.facility && fac) {
+              saveLocationsToAirtable(email, rms || [], { "Facility Name": fac, "Cleaning Team Email": ce || "", "Business Name": biz || "" });
             }
             setAuthLoading(false);
             nav("dashboard");
@@ -1186,7 +1246,12 @@ export default function App() {
             </div>
             <Btn label="Generate My QR Codes →" onClick={async () => {
               const fields = { "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Cleaning Team Email": alertEmail, "Phone Number": alertPhone, "Facility Name": location, "Plan": "Trial", "Client Status": "Trial", "Locations": JSON.stringify(rooms) };
-              await saveLocationsToAirtable(email, rooms, fields);
+              const savedOk = await saveLocationsToAirtable(email, rooms, fields);
+              // Local backup: if Airtable is unavailable or rejects the write,
+              // the setup still survives a logout on this device rather than
+              // forcing the client through onboarding again.
+              saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms });
+              if (!savedOk) showToast("⚠️ Setup saved on this device, but syncing failed — contact support if it disappears.", T.yellow);
               setStep(4);
             }} disabled={!alertEmail} variant="primary" full />
           </>
