@@ -371,7 +371,10 @@ async function fetchReports(scope) {
       try {
         const dbg = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports?maxRecords=3&sort[0][field]=Created Time&sort[0][direction]=desc`, { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } });
         const dj = await dbg.json();
-        console.warn("[Dashboard] Scoped query matched 0 rows. Scope:", scope, "Latest rows in table:", (dj.records || []).map(r => ({ Location: r.fields["Location"], Room: r.fields["Room"], CleaningTeamEmail: r.fields["Cleaning Team Email"] })));
+        const sample = (dj.records || []).map(r => ({ Location: r.fields["Location"] || "(blank)", Room: r.fields["Room"] || "(blank)", CleaningTeamEmail: r.fields["Cleaning Team Email"] || "(blank)" }));
+        // JSON.stringify so a plain copy-paste of the console shows full values —
+        // no expanding collapsed "Array(2)"/"{...}" placeholders required.
+        console.warn("[Dashboard] ZERO MATCH — FULL DUMP:\n  MY SCOPE = " + JSON.stringify(scope) + "\n  ACTUAL ROWS IN TABLE = " + JSON.stringify(sample));
       } catch (e) {}
     }
     return data.records.map(r => {
