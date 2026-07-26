@@ -1046,7 +1046,7 @@ export default function App() {
         <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Create your account</h2>
         <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 14-day pilot. No credit card required.</p>
         <Card>
-          <Input label="Business Name" value={bizName} onChange={setBizName} placeholder="Evans Distribution" />
+          <Input label="Business Name" value={bizName} onChange={setBizName} placeholder="Your business name" />
           <Input label="Work Email" value={email} onChange={setEmail} placeholder="you@yourbusiness.com" type="email" />
           <Input label="Password (min 6 characters)" value={password} onChange={setPassword} placeholder="Create a strong password" type="password" />
           <div style={{ marginBottom: 20 }}>
