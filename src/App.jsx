@@ -9,8 +9,8 @@ const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
 // Build marker — bump when triggering redeploys; visible in browser console.
-const BUILD_VERSION = "2026-07-26-schema-aligned";
-try { console.log(`[SupplyPing] build ${BUILD_VERSION} — schema aligned`); } catch (e) {}
+const BUILD_VERSION = "2026-07-26-selfhealing-writes";
+try { console.log(`[SupplyPing] build ${BUILD_VERSION} — self-healing writes`); } catch (e) {}
 
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
@@ -398,52 +398,20 @@ async function fetchReports(scope) {
   } catch (e) { return []; }
 }
 
-async function submitReportToAirtable(fields, attemptLabel = "write") {
+async function submitReportToAirtable(fields, attemptLabel = "report") {
   try {
-    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ fields })
-    });
-    if (!res.ok) {
-      // Airtable rejects the WHOLE row for one bad field (unknown name, or a
-      // single-select value that isn't a configured option). Log the exact
-      // reason — a silent failure here looks identical to an empty dashboard.
-      const err = await res.json().catch(() => ({}));
-      console.error(`[Airtable] REJECTED attempt "${attemptLabel}" —`, res.status,
-        JSON.stringify(err.error || err),
-        "| fields sent:", JSON.stringify(Object.keys(fields)),
-        "| values:", JSON.stringify(fields));
-      return false;
-    }
-    const saved = await res.json().catch(() => ({}));
-    console.log(`[Airtable] Row created ✓ via "${attemptLabel}" — id:`, saved.id || "(unknown)");
-    return true;
+    const r = await airtableWrite(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, "POST", fields, `Report (${attemptLabel})`);
+    return r.ok;
   } catch (e) { console.error("[Airtable] Network error on report write:", e); return false; }
 }
 
 async function resolveInAirtable(id) {
   try {
-    // Resolving returns the room to normal operation. Bathroom Status is sent
-    // alongside Resolved; if that field is absent the retry below still saves
-    // the resolution itself so a fix is never lost to a schema mismatch.
-    let res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
-      method: "PATCH",
-      headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ fields: { "Resolved": true, "Bathroom Status": "Open" } })
-    });
-    if (!res.ok) {
-      res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, {
-        method: "PATCH",
-        headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: { "Resolved": true } })
-      });
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error("[Resolve] Airtable PATCH failed:", res.status, err.error || err);
-      return { ok: false, error: (err.error && (err.error.message || err.error.type)) || `HTTP ${res.status}` };
-    }
+    // Resolving returns the room to normal operation. Unknown fields (e.g. if
+    // Bathroom Status doesn't exist) are dropped automatically by airtableWrite.
+    const r = await airtableWrite(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports/${id}`, "PATCH",
+      { "Resolved": true, "Bathroom Status": "Open" }, "Resolve");
+    if (!r.ok) return { ok: false, error: r.error || "write failed" };
     return { ok: true };
   } catch (e) {
     console.error("[Resolve] Network error:", e);
@@ -458,6 +426,39 @@ async function resolveInAirtable(id) {
 function clientEmailFormula(email) {
   const clean = String(email || "").toLowerCase().trim().replace(/["\\]/g, "");
   return `LOWER(TRIM({Email}))="${clean}"`;
+}
+
+// Self-healing Airtable writer. Airtable rejects an ENTIRE row for one unknown
+// field name, which has repeatedly caused silent data loss here. This detects
+// UNKNOWN_FIELD_NAME, removes the offending field, and retries — so a schema
+// mismatch degrades to "that one field wasn't saved" instead of losing the row.
+async function airtableWrite(url, method, fields, label) {
+  let payload = { ...fields };
+  const dropped = [];
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(url, {
+      method,
+      headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: payload }),
+    });
+    if (res.ok) {
+      if (dropped.length) console.warn(`[Airtable] ${label} saved ✓ — but these fields do not exist in the table and were skipped: ${dropped.join(", ")}`);
+      else console.log(`[Airtable] ${label} saved ✓`);
+      const body = await res.json().catch(() => ({}));
+      return { ok: true, id: body.id, dropped };
+    }
+    const err = await res.json().catch(() => ({}));
+    const msg = (err && err.error && (err.error.message || err.error.type)) || `HTTP ${res.status}`;
+    const unknown = /Unknown field name:\s*\\?"?([^"\\]+)/i.exec(String(msg));
+    if (unknown && payload[unknown[1]] !== undefined) {
+      dropped.push(unknown[1]);
+      delete payload[unknown[1]];
+      continue; // retry without it
+    }
+    console.error(`[Airtable] ${label} FAILED —`, res.status, msg, "| fields:", JSON.stringify(Object.keys(payload)));
+    return { ok: false, error: msg };
+  }
+  return { ok: false, error: "Too many unknown fields" };
 }
 
 async function findClientRecordId(email) {
@@ -483,43 +484,18 @@ async function writeClientFields(email, fields, label) {
   const url = recordId
     ? `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients/${recordId}`
     : `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients`;
-  const body = recordId ? { fields } : { fields: { "Email": email, ...fields } };
-  const res = await fetch(url, {
-    method: recordId ? "PATCH" : "POST",
-    headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.error(`[Airtable] Client profile REJECTED (${label}) —`, res.status,
-      JSON.stringify(err.error || err), "| fields sent:", JSON.stringify(Object.keys(body.fields)));
-    return false;
-  }
-  console.log(`[Airtable] Client profile saved ✓ (${label})`);
-  return true;
+  const payload = recordId ? fields : { "Email": email, ...fields };
+  const r = await airtableWrite(url, recordId ? "PATCH" : "POST", payload, `Client profile (${label})`);
+  return r.ok;
 }
 
 async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
   if (!email) return false;
   const fields = { "Locations": JSON.stringify(roomsArray || []), ...extra };
   try {
-    // Attempt 1: everything.
-    if (await writeClientFields(email, fields, "full profile")) return true;
-
-    // Attempt 2: only what a session restore genuinely requires. Drops the
-    // likely offenders (Plan / Client Status / Industry single-selects).
-    const essential = {};
-    for (const k of ["Locations", "Facility Name", "Cleaning Team Email", "Business Name", "Phone Number"]) {
-      if (fields[k] !== undefined) essential[k] = fields[k];
-    }
-    if (await writeClientFields(email, essential, "essential fields only")) return true;
-
-    // Attempt 3: the absolute minimum that keeps the dashboard working.
-    const minimal = {};
-    for (const k of ["Locations", "Facility Name", "Cleaning Team Email"]) {
-      if (fields[k] !== undefined) minimal[k] = fields[k];
-    }
-    return await writeClientFields(email, minimal, "minimal (locations + facility + email)");
+    // airtableWrite self-heals unknown field names, so a single attempt now
+    // saves everything the table actually supports.
+    return await writeClientFields(email, fields, "full profile");
   } catch (e) {
     console.error("[Airtable] Client profile network error:", e);
     return false;
