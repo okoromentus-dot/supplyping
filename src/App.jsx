@@ -285,13 +285,53 @@ const LANGS = [
 ];
 
 const TR = {
-  es: { "Safety & Hazards": "Seguridad y Peligros", "Security & Facilities": "Vigilancia e Instalaciones", "Maintenance & Repairs": "Mantenimiento y Reparaciones", "Cleaning & Sanitation": "Limpieza e Higiene", "Supplies": "Suministros", "Wet Floor / Spill": "Piso Mojado / Derrame", "Blocked Exit / Aisle": "Salida / Pasillo Bloqueado", "Trip / Fall Hazard": "Riesgo de Tropiezo / Caída", "Near-Miss / Incident": "Casi Accidente / Incidente", "PPE / Equipment Unsafe": "EPP / Equipo Inseguro", "Access / Door Issue": "Problema de Acceso / Puerta", "Property Damage": "Daño a la Propiedad", "Suspicious Activity": "Actividad Sospechosa", "Lighting Out / Flickering": "Luz Apagada / Parpadeante", "HVAC / Temperature Issue": "Problema de Clima / Temperatura", "Broken Fixture / Door": "Accesorio / Puerta Rota", "Equipment Issue": "Problema de Equipo", "Spill / Mess Needs Cleanup": "Derrame / Suciedad por Limpiar", "Restroom Needs Attention": "Baño Necesita Atención", "Trash / Bins Full": "Basura / Botes Llenos", "No Soap": "Sin Jabón", "No Paper Towels": "Sin Toallas de Papel", "No Toilet Paper": "Sin Papel Higiénico", "No Hand Sanitizer": "Sin Desinfectante", "Breakroom Restock": "Reabastecer Comedor", "Report a Facility Issue": "Reportar un Problema", "Select the issue(s). Takes 10 seconds.": "Seleccione el problema. Toma 10 segundos.", "Select one or more issues, then tap Send": "Seleccione y toque Enviar", "Other / Custom Issue": "Otro Problema", "Describe any other issue here...": "Describa el problema aquí...", "Add a Photo (optional)": "Agregar Foto (opcional)", "Take Photo": "Tomar Foto", "From Library": "De la Galería", "Send Report →": "Enviar Reporte →", "Sending...": "Enviando...", "Report Sent!": "¡Reporte Enviado!", "The team has been notified and is on the way.": "El equipo ha sido notificado y va en camino.", "Report Another Issue": "Reportar Otro Problema", "Speak": "Hablar", "Listening...": "Escuchando...", "Low": "Baja", "Medium": "Media", "High": "Alta", "AI Suggestion — review & confirm": "Sugerencia IA — revise y confirme", "Suggested severity": "Severidad sugerida", "Description (editable)": "Descripción (editable)"  },
-  fr: { "Safety & Hazards": "Sécurité et Dangers", "Security & Facilities": "Sûreté et Installations", "Maintenance & Repairs": "Maintenance et Réparations", "Cleaning & Sanitation": "Nettoyage et Hygiène", "Supplies": "Fournitures", "Wet Floor / Spill": "Sol Mouillé / Déversement", "Blocked Exit / Aisle": "Sortie / Allée Bloquée", "Trip / Fall Hazard": "Risque de Chute", "Near-Miss / Incident": "Quasi-Accident / Incident", "PPE / Equipment Unsafe": "EPI / Équipement Dangereux", "Access / Door Issue": "Problème d'Accès / Porte", "Property Damage": "Dommage Matériel", "Suspicious Activity": "Activité Suspecte", "Lighting Out / Flickering": "Éclairage Éteint / Clignotant", "HVAC / Temperature Issue": "Problème CVC / Température", "Broken Fixture / Door": "Équipement / Porte Cassée", "Equipment Issue": "Problème d'Équipement", "Spill / Mess Needs Cleanup": "Déversement / Saleté à Nettoyer", "Restroom Needs Attention": "Toilettes à Vérifier", "Trash / Bins Full": "Poubelles Pleines", "No Soap": "Pas de Savon", "No Paper Towels": "Pas d'Essuie-tout", "No Toilet Paper": "Pas de Papier Toilette", "No Hand Sanitizer": "Pas de Gel Désinfectant", "Breakroom Restock": "Réappro Salle de Pause", "Report a Facility Issue": "Signaler un Problème", "Select the issue(s). Takes 10 seconds.": "Sélectionnez le problème. 10 secondes.", "Select one or more issues, then tap Send": "Sélectionnez puis appuyez Envoyer", "Other / Custom Issue": "Autre Problème", "Describe any other issue here...": "Décrivez le problème ici...", "Add a Photo (optional)": "Ajouter une Photo (optionnel)", "Take Photo": "Prendre une Photo", "From Library": "De la Galerie", "Send Report →": "Envoyer →", "Sending...": "Envoi...", "Report Sent!": "Signalement Envoyé !", "The team has been notified and is on the way.": "L'équipe a été notifiée et arrive.", "Report Another Issue": "Signaler un Autre Problème", "Speak": "Parler", "Listening...": "Écoute...", "Low": "Faible", "Medium": "Moyen", "High": "Élevé", "AI Suggestion — review & confirm": "Suggestion IA — vérifiez et confirmez", "Suggested severity": "Gravité suggérée", "Description (editable)": "Description (modifiable)"  },
-  ar: { "Safety & Hazards": "السلامة والمخاطر", "Security & Facilities": "الأمن والمرافق", "Maintenance & Repairs": "الصيانة والإصلاحات", "Cleaning & Sanitation": "التنظيف والنظافة", "Supplies": "المستلزمات", "Wet Floor / Spill": "أرضية مبللة / انسكاب", "Blocked Exit / Aisle": "مخرج / ممر مسدود", "Trip / Fall Hazard": "خطر التعثر / السقوط", "Near-Miss / Incident": "حادث وشيك / واقعة", "PPE / Equipment Unsafe": "معدات وقاية غير آمنة", "Access / Door Issue": "مشكلة دخول / باب", "Property Damage": "أضرار بالممتلكات", "Suspicious Activity": "نشاط مشبوه", "Lighting Out / Flickering": "إضاءة مطفأة / وامضة", "HVAC / Temperature Issue": "مشكلة تكييف / حرارة", "Broken Fixture / Door": "تركيبات / باب مكسور", "Equipment Issue": "مشكلة معدات", "Spill / Mess Needs Cleanup": "انسكاب يحتاج تنظيف", "Restroom Needs Attention": "دورة المياه تحتاج عناية", "Trash / Bins Full": "سلال القمامة ممتلئة", "No Soap": "لا يوجد صابون", "No Paper Towels": "لا توجد مناشف ورقية", "No Toilet Paper": "لا يوجد ورق تواليت", "No Hand Sanitizer": "لا يوجد معقم", "Breakroom Restock": "تزويد غرفة الاستراحة", "Report a Facility Issue": "الإبلاغ عن مشكلة", "Select the issue(s). Takes 10 seconds.": "اختر المشكلة. يستغرق 10 ثوانٍ.", "Select one or more issues, then tap Send": "اختر ثم اضغط إرسال", "Other / Custom Issue": "مشكلة أخرى", "Describe any other issue here...": "صف المشكلة هنا...", "Add a Photo (optional)": "أضف صورة (اختياري)", "Take Photo": "التقط صورة", "From Library": "من المعرض", "Send Report →": "إرسال البلاغ", "Sending...": "جارٍ الإرسال...", "Report Sent!": "تم إرسال البلاغ!", "The team has been notified and is on the way.": "تم إخطار الفريق وهو في الطريق.", "Report Another Issue": "الإبلاغ عن مشكلة أخرى", "Speak": "تحدث", "Listening...": "يستمع...", "Low": "منخفض", "Medium": "متوسط", "High": "مرتفع", "AI Suggestion — review & confirm": "اقتراح الذكاء الاصطناعي — راجع وأكد", "Suggested severity": "الخطورة المقترحة", "Description (editable)": "الوصف (قابل للتعديل)"  },
-  bn: { "Safety & Hazards": "নিরাপত্তা ও ঝুঁকি", "Security & Facilities": "সিকিউরিটি ও ফ্যাসিলিটি", "Maintenance & Repairs": "রক্ষণাবেক্ষণ ও মেরামত", "Cleaning & Sanitation": "পরিচ্ছন্নতা ও স্যানিটেশন", "Supplies": "সরবরাহ", "Wet Floor / Spill": "ভেজা মেঝে / ছলকে পড়া", "Blocked Exit / Aisle": "অবরুদ্ধ প্রস্থান / পথ", "Trip / Fall Hazard": "হোঁচট / পড়ার ঝুঁকি", "Near-Miss / Incident": "প্রায়-দুর্ঘটনা / ঘটনা", "PPE / Equipment Unsafe": "পিপিই / অনিরাপদ সরঞ্জাম", "Access / Door Issue": "প্রবেশ / দরজার সমস্যা", "Property Damage": "সম্পত্তির ক্ষতি", "Suspicious Activity": "সন্দেহজনক কার্যকলাপ", "Lighting Out / Flickering": "লাইট নষ্ট / ঝিকমিক", "HVAC / Temperature Issue": "এসি / তাপমাত্রার সমস্যা", "Broken Fixture / Door": "ভাঙা ফিক্সচার / দরজা", "Equipment Issue": "সরঞ্জামের সমস্যা", "Spill / Mess Needs Cleanup": "পরিষ্কার প্রয়োজন", "Restroom Needs Attention": "টয়লেটে মনোযোগ প্রয়োজন", "Trash / Bins Full": "ময়লার ঝুড়ি ভর্তি", "No Soap": "সাবান নেই", "No Paper Towels": "কাগজের তোয়ালে নেই", "No Toilet Paper": "টয়লেট পেপার নেই", "No Hand Sanitizer": "স্যানিটাইজার নেই", "Breakroom Restock": "ব্রেকরুম রিস্টক", "Report a Facility Issue": "সমস্যা রিপোর্ট করুন", "Select the issue(s). Takes 10 seconds.": "সমস্যা নির্বাচন করুন। ১০ সেকেন্ড লাগে।", "Select one or more issues, then tap Send": "নির্বাচন করে পাঠান চাপুন", "Other / Custom Issue": "অন্যান্য সমস্যা", "Describe any other issue here...": "সমস্যাটি এখানে লিখুন...", "Add a Photo (optional)": "ছবি যোগ করুন (ঐচ্ছিক)", "Take Photo": "ছবি তুলুন", "From Library": "গ্যালারি থেকে", "Send Report →": "রিপোর্ট পাঠান →", "Sending...": "পাঠানো হচ্ছে...", "Report Sent!": "রিপোর্ট পাঠানো হয়েছে!", "The team has been notified and is on the way.": "টিমকে জানানো হয়েছে, তারা আসছে।", "Report Another Issue": "আরেকটি সমস্যা রিপোর্ট করুন", "Speak": "বলুন", "Listening...": "শোনা হচ্ছে...", "Low": "কম", "Medium": "মাঝারি", "High": "উচ্চ", "AI Suggestion — review & confirm": "এআই পরামর্শ — যাচাই করুন", "Suggested severity": "প্রস্তাবিত মাত্রা", "Description (editable)": "বিবরণ (সম্পাদনাযোগ্য)"  },
-  hi: { "Safety & Hazards": "सुरक्षा और खतरे", "Security & Facilities": "सिक्योरिटी और सुविधाएँ", "Maintenance & Repairs": "रखरखाव और मरम्मत", "Cleaning & Sanitation": "सफ़ाई और स्वच्छता", "Supplies": "सामग्री", "Wet Floor / Spill": "गीला फ़र्श / रिसाव", "Blocked Exit / Aisle": "अवरुद्ध निकास / गलियारा", "Trip / Fall Hazard": "ठोकर / गिरने का खतरा", "Near-Miss / Incident": "निकट-चूक / घटना", "PPE / Equipment Unsafe": "पीपीई / असुरक्षित उपकरण", "Access / Door Issue": "प्रवेश / दरवाज़े की समस्या", "Property Damage": "संपत्ति क्षति", "Suspicious Activity": "संदिग्ध गतिविधि", "Lighting Out / Flickering": "लाइट बंद / टिमटिमाती", "HVAC / Temperature Issue": "एसी / तापमान समस्या", "Broken Fixture / Door": "टूटा उपकरण / दरवाज़ा", "Equipment Issue": "उपकरण समस्या", "Spill / Mess Needs Cleanup": "सफ़ाई की ज़रूरत", "Restroom Needs Attention": "शौचालय पर ध्यान दें", "Trash / Bins Full": "कूड़ेदान भरे हैं", "No Soap": "साबुन नहीं है", "No Paper Towels": "पेपर टॉवल नहीं है", "No Toilet Paper": "टॉयलेट पेपर नहीं है", "No Hand Sanitizer": "सैनिटाइज़र नहीं है", "Breakroom Restock": "ब्रेकरूम रीस्टॉक", "Report a Facility Issue": "समस्या रिपोर्ट करें", "Select the issue(s). Takes 10 seconds.": "समस्या चुनें। 10 सेकंड लगते हैं।", "Select one or more issues, then tap Send": "चुनें और भेजें दबाएँ", "Other / Custom Issue": "अन्य समस्या", "Describe any other issue here...": "समस्या यहाँ लिखें...", "Add a Photo (optional)": "फ़ोटो जोड़ें (वैकल्पिक)", "Take Photo": "फ़ोटो लें", "From Library": "गैलरी से", "Send Report →": "रिपोर्ट भेजें →", "Sending...": "भेजा जा रहा है...", "Report Sent!": "रिपोर्ट भेज दी गई!", "The team has been notified and is on the way.": "टीम को सूचित कर दिया गया है।", "Report Another Issue": "एक और समस्या रिपोर्ट करें", "Speak": "बोलें", "Listening...": "सुन रहा है...", "Low": "कम", "Medium": "मध्यम", "High": "उच्च", "AI Suggestion — review & confirm": "एआई सुझाव — जाँचें और पुष्टि करें", "Suggested severity": "सुझाई गई गंभीरता", "Description (editable)": "विवरण (संपादन योग्य)"  },
-  zh: { "Safety & Hazards": "安全与隐患", "Security & Facilities": "安保与设施", "Maintenance & Repairs": "维护与维修", "Cleaning & Sanitation": "清洁与卫生", "Supplies": "物资", "Wet Floor / Spill": "地面湿滑 / 洒漏", "Blocked Exit / Aisle": "出口 / 通道堵塞", "Trip / Fall Hazard": "绊倒 / 跌倒风险", "Near-Miss / Incident": "险情 / 事故", "PPE / Equipment Unsafe": "防护装备不安全", "Access / Door Issue": "门禁 / 门的问题", "Property Damage": "财产损坏", "Suspicious Activity": "可疑活动", "Lighting Out / Flickering": "灯光故障 / 闪烁", "HVAC / Temperature Issue": "空调 / 温度问题", "Broken Fixture / Door": "设施 / 门损坏", "Equipment Issue": "设备问题", "Spill / Mess Needs Cleanup": "需要清理", "Restroom Needs Attention": "洗手间需要处理", "Trash / Bins Full": "垃圾桶已满", "No Soap": "没有肥皂", "No Paper Towels": "没有纸巾", "No Toilet Paper": "没有厕纸", "No Hand Sanitizer": "没有消毒液", "Breakroom Restock": "休息室补货", "Report a Facility Issue": "报告设施问题", "Select the issue(s). Takes 10 seconds.": "选择问题,只需10秒。", "Select one or more issues, then tap Send": "选择后点击发送", "Other / Custom Issue": "其他问题", "Describe any other issue here...": "在此描述问题...", "Add a Photo (optional)": "添加照片(可选)", "Take Photo": "拍照", "From Library": "从相册选择", "Send Report →": "发送报告 →", "Sending...": "发送中...", "Report Sent!": "报告已发送!", "The team has been notified and is on the way.": "团队已收到通知,正在处理。", "Report Another Issue": "报告另一个问题", "Speak": "说话", "Listening...": "正在听...", "Low": "低", "Medium": "中", "High": "高", "AI Suggestion — review & confirm": "AI 建议 — 请确认", "Suggested severity": "建议严重程度", "Description (editable)": "描述(可编辑)" },
+  es: { "Safety & Hazards": "Seguridad y Peligros", "Security & Facilities": "Vigilancia e Instalaciones", "Maintenance & Repairs": "Mantenimiento y Reparaciones", "Cleaning & Sanitation": "Limpieza e Higiene", "Supplies": "Suministros", "Wet Floor / Spill": "Piso Mojado / Derrame", "Blocked Exit / Aisle": "Salida / Pasillo Bloqueado", "Trip / Fall Hazard": "Riesgo de Tropiezo / Caída", "Near-Miss / Incident": "Casi Accidente / Incidente", "PPE / Equipment Unsafe": "EPP / Equipo Inseguro", "Access / Door Issue": "Problema de Acceso / Puerta", "Property Damage": "Daño a la Propiedad", "Suspicious Activity": "Actividad Sospechosa", "Lighting Out / Flickering": "Luz Apagada / Parpadeante", "HVAC / Temperature Issue": "Problema de Clima / Temperatura", "Broken Fixture / Door": "Accesorio / Puerta Rota", "Equipment Issue": "Problema de Equipo", "Spill / Mess Needs Cleanup": "Derrame / Suciedad por Limpiar", "Restroom Needs Attention": "Baño Necesita Atención", "Trash / Bins Full": "Basura / Botes Llenos", "No Soap": "Sin Jabón", "No Paper Towels": "Sin Toallas de Papel", "No Toilet Paper": "Sin Papel Higiénico", "No Hand Sanitizer": "Sin Desinfectante", "Breakroom Restock": "Reabastecer Comedor", "Report a Facility Issue": "Reportar un Problema", "Select the issue(s). Takes 10 seconds.": "Seleccione el problema. Toma 10 segundos.", "Select one or more issues, then tap Send": "Seleccione y toque Enviar", "Other / Custom Issue": "Otro Problema", "Describe any other issue here...": "Describa el problema aquí...", "Add a Photo (optional)": "Agregar Foto (opcional)", "Take Photo": "Tomar Foto", "From Library": "De la Galería", "Send Report →": "Enviar Reporte →", "Sending...": "Enviando...", "Report Sent!": "¡Reporte Enviado!", "The team has been notified and is on the way.": "El equipo ha sido notificado y va en camino.", "Report Another Issue": "Reportar Otro Problema", "Speak": "Hablar", "Listening...": "Escuchando...", "Low": "Baja", "Medium": "Media", "High": "Alta", "AI Suggestion — review & confirm": "Sugerencia IA — revise y confirme", "Suggested severity": "Severidad sugerida", "Description (editable)": "Descripción (editable)", "Active Issues": "Problemas Activos", "Resolved": "Resueltos", "Fixed It": "Resuelto", "No active issues": "Sin problemas activos", "Dashboard": "Panel", "Manage": "Administrar", "Account": "Cuenta", "Refresh": "Actualizar", "Log Out": "Cerrar Sesión", "Language": "Idioma" },
+  fr: { "Safety & Hazards": "Sécurité et Dangers", "Security & Facilities": "Sûreté et Installations", "Maintenance & Repairs": "Maintenance et Réparations", "Cleaning & Sanitation": "Nettoyage et Hygiène", "Supplies": "Fournitures", "Wet Floor / Spill": "Sol Mouillé / Déversement", "Blocked Exit / Aisle": "Sortie / Allée Bloquée", "Trip / Fall Hazard": "Risque de Chute", "Near-Miss / Incident": "Quasi-Accident / Incident", "PPE / Equipment Unsafe": "EPI / Équipement Dangereux", "Access / Door Issue": "Problème d'Accès / Porte", "Property Damage": "Dommage Matériel", "Suspicious Activity": "Activité Suspecte", "Lighting Out / Flickering": "Éclairage Éteint / Clignotant", "HVAC / Temperature Issue": "Problème CVC / Température", "Broken Fixture / Door": "Équipement / Porte Cassée", "Equipment Issue": "Problème d'Équipement", "Spill / Mess Needs Cleanup": "Déversement / Saleté à Nettoyer", "Restroom Needs Attention": "Toilettes à Vérifier", "Trash / Bins Full": "Poubelles Pleines", "No Soap": "Pas de Savon", "No Paper Towels": "Pas d'Essuie-tout", "No Toilet Paper": "Pas de Papier Toilette", "No Hand Sanitizer": "Pas de Gel Désinfectant", "Breakroom Restock": "Réappro Salle de Pause", "Report a Facility Issue": "Signaler un Problème", "Select the issue(s). Takes 10 seconds.": "Sélectionnez le problème. 10 secondes.", "Select one or more issues, then tap Send": "Sélectionnez puis appuyez Envoyer", "Other / Custom Issue": "Autre Problème", "Describe any other issue here...": "Décrivez le problème ici...", "Add a Photo (optional)": "Ajouter une Photo (optionnel)", "Take Photo": "Prendre une Photo", "From Library": "De la Galerie", "Send Report →": "Envoyer →", "Sending...": "Envoi...", "Report Sent!": "Signalement Envoyé !", "The team has been notified and is on the way.": "L'équipe a été notifiée et arrive.", "Report Another Issue": "Signaler un Autre Problème", "Speak": "Parler", "Listening...": "Écoute...", "Low": "Faible", "Medium": "Moyen", "High": "Élevé", "AI Suggestion — review & confirm": "Suggestion IA — vérifiez et confirmez", "Suggested severity": "Gravité suggérée", "Description (editable)": "Description (modifiable)", "Active Issues": "Problèmes Actifs", "Resolved": "Résolus", "Fixed It": "Résolu", "No active issues": "Aucun problème actif", "Dashboard": "Tableau de bord", "Manage": "Gérer", "Account": "Compte", "Refresh": "Actualiser", "Log Out": "Déconnexion", "Language": "Langue" },
+  ar: { "Safety & Hazards": "السلامة والمخاطر", "Security & Facilities": "الأمن والمرافق", "Maintenance & Repairs": "الصيانة والإصلاحات", "Cleaning & Sanitation": "التنظيف والنظافة", "Supplies": "المستلزمات", "Wet Floor / Spill": "أرضية مبللة / انسكاب", "Blocked Exit / Aisle": "مخرج / ممر مسدود", "Trip / Fall Hazard": "خطر التعثر / السقوط", "Near-Miss / Incident": "حادث وشيك / واقعة", "PPE / Equipment Unsafe": "معدات وقاية غير آمنة", "Access / Door Issue": "مشكلة دخول / باب", "Property Damage": "أضرار بالممتلكات", "Suspicious Activity": "نشاط مشبوه", "Lighting Out / Flickering": "إضاءة مطفأة / وامضة", "HVAC / Temperature Issue": "مشكلة تكييف / حرارة", "Broken Fixture / Door": "تركيبات / باب مكسور", "Equipment Issue": "مشكلة معدات", "Spill / Mess Needs Cleanup": "انسكاب يحتاج تنظيف", "Restroom Needs Attention": "دورة المياه تحتاج عناية", "Trash / Bins Full": "سلال القمامة ممتلئة", "No Soap": "لا يوجد صابون", "No Paper Towels": "لا توجد مناشف ورقية", "No Toilet Paper": "لا يوجد ورق تواليت", "No Hand Sanitizer": "لا يوجد معقم", "Breakroom Restock": "تزويد غرفة الاستراحة", "Report a Facility Issue": "الإبلاغ عن مشكلة", "Select the issue(s). Takes 10 seconds.": "اختر المشكلة. يستغرق 10 ثوانٍ.", "Select one or more issues, then tap Send": "اختر ثم اضغط إرسال", "Other / Custom Issue": "مشكلة أخرى", "Describe any other issue here...": "صف المشكلة هنا...", "Add a Photo (optional)": "أضف صورة (اختياري)", "Take Photo": "التقط صورة", "From Library": "من المعرض", "Send Report →": "إرسال البلاغ", "Sending...": "جارٍ الإرسال...", "Report Sent!": "تم إرسال البلاغ!", "The team has been notified and is on the way.": "تم إخطار الفريق وهو في الطريق.", "Report Another Issue": "الإبلاغ عن مشكلة أخرى", "Speak": "تحدث", "Listening...": "يستمع...", "Low": "منخفض", "Medium": "متوسط", "High": "مرتفع", "AI Suggestion — review & confirm": "اقتراح الذكاء الاصطناعي — راجع وأكد", "Suggested severity": "الخطورة المقترحة", "Description (editable)": "الوصف (قابل للتعديل)", "Active Issues": "المشكلات النشطة", "Resolved": "تم الحل", "Fixed It": "تم الإصلاح", "No active issues": "لا توجد مشكلات نشطة", "Dashboard": "لوحة التحكم", "Manage": "إدارة", "Account": "الحساب", "Refresh": "تحديث", "Log Out": "تسجيل الخروج", "Language": "اللغة" },
+  bn: { "Safety & Hazards": "নিরাপত্তা ও ঝুঁকি", "Security & Facilities": "সিকিউরিটি ও ফ্যাসিলিটি", "Maintenance & Repairs": "রক্ষণাবেক্ষণ ও মেরামত", "Cleaning & Sanitation": "পরিচ্ছন্নতা ও স্যানিটেশন", "Supplies": "সরবরাহ", "Wet Floor / Spill": "ভেজা মেঝে / ছলকে পড়া", "Blocked Exit / Aisle": "অবরুদ্ধ প্রস্থান / পথ", "Trip / Fall Hazard": "হোঁচট / পড়ার ঝুঁকি", "Near-Miss / Incident": "প্রায়-দুর্ঘটনা / ঘটনা", "PPE / Equipment Unsafe": "পিপিই / অনিরাপদ সরঞ্জাম", "Access / Door Issue": "প্রবেশ / দরজার সমস্যা", "Property Damage": "সম্পত্তির ক্ষতি", "Suspicious Activity": "সন্দেহজনক কার্যকলাপ", "Lighting Out / Flickering": "লাইট নষ্ট / ঝিকমিক", "HVAC / Temperature Issue": "এসি / তাপমাত্রার সমস্যা", "Broken Fixture / Door": "ভাঙা ফিক্সচার / দরজা", "Equipment Issue": "সরঞ্জামের সমস্যা", "Spill / Mess Needs Cleanup": "পরিষ্কার প্রয়োজন", "Restroom Needs Attention": "টয়লেটে মনোযোগ প্রয়োজন", "Trash / Bins Full": "ময়লার ঝুড়ি ভর্তি", "No Soap": "সাবান নেই", "No Paper Towels": "কাগজের তোয়ালে নেই", "No Toilet Paper": "টয়লেট পেপার নেই", "No Hand Sanitizer": "স্যানিটাইজার নেই", "Breakroom Restock": "ব্রেকরুম রিস্টক", "Report a Facility Issue": "সমস্যা রিপোর্ট করুন", "Select the issue(s). Takes 10 seconds.": "সমস্যা নির্বাচন করুন। ১০ সেকেন্ড লাগে।", "Select one or more issues, then tap Send": "নির্বাচন করে পাঠান চাপুন", "Other / Custom Issue": "অন্যান্য সমস্যা", "Describe any other issue here...": "সমস্যাটি এখানে লিখুন...", "Add a Photo (optional)": "ছবি যোগ করুন (ঐচ্ছিক)", "Take Photo": "ছবি তুলুন", "From Library": "গ্যালারি থেকে", "Send Report →": "রিপোর্ট পাঠান →", "Sending...": "পাঠানো হচ্ছে...", "Report Sent!": "রিপোর্ট পাঠানো হয়েছে!", "The team has been notified and is on the way.": "টিমকে জানানো হয়েছে, তারা আসছে।", "Report Another Issue": "আরেকটি সমস্যা রিপোর্ট করুন", "Speak": "বলুন", "Listening...": "শোনা হচ্ছে...", "Low": "কম", "Medium": "মাঝারি", "High": "উচ্চ", "AI Suggestion — review & confirm": "এআই পরামর্শ — যাচাই করুন", "Suggested severity": "প্রস্তাবিত মাত্রা", "Description (editable)": "বিবরণ (সম্পাদনাযোগ্য)", "Active Issues": "সক্রিয় সমস্যা", "Resolved": "সমাধান হয়েছে", "Fixed It": "সমাধান হয়েছে", "No active issues": "কোনো সক্রিয় সমস্যা নেই", "Dashboard": "ড্যাশবোর্ড", "Manage": "পরিচালনা", "Account": "অ্যাকাউন্ট", "Refresh": "রিফ্রেশ", "Log Out": "লগ আউট", "Language": "ভাষা" },
+  hi: { "Safety & Hazards": "सुरक्षा और खतरे", "Security & Facilities": "सिक्योरिटी और सुविधाएँ", "Maintenance & Repairs": "रखरखाव और मरम्मत", "Cleaning & Sanitation": "सफ़ाई और स्वच्छता", "Supplies": "सामग्री", "Wet Floor / Spill": "गीला फ़र्श / रिसाव", "Blocked Exit / Aisle": "अवरुद्ध निकास / गलियारा", "Trip / Fall Hazard": "ठोकर / गिरने का खतरा", "Near-Miss / Incident": "निकट-चूक / घटना", "PPE / Equipment Unsafe": "पीपीई / असुरक्षित उपकरण", "Access / Door Issue": "प्रवेश / दरवाज़े की समस्या", "Property Damage": "संपत्ति क्षति", "Suspicious Activity": "संदिग्ध गतिविधि", "Lighting Out / Flickering": "लाइट बंद / टिमटिमाती", "HVAC / Temperature Issue": "एसी / तापमान समस्या", "Broken Fixture / Door": "टूटा उपकरण / दरवाज़ा", "Equipment Issue": "उपकरण समस्या", "Spill / Mess Needs Cleanup": "सफ़ाई की ज़रूरत", "Restroom Needs Attention": "शौचालय पर ध्यान दें", "Trash / Bins Full": "कूड़ेदान भरे हैं", "No Soap": "साबुन नहीं है", "No Paper Towels": "पेपर टॉवल नहीं है", "No Toilet Paper": "टॉयलेट पेपर नहीं है", "No Hand Sanitizer": "सैनिटाइज़र नहीं है", "Breakroom Restock": "ब्रेकरूम रीस्टॉक", "Report a Facility Issue": "समस्या रिपोर्ट करें", "Select the issue(s). Takes 10 seconds.": "समस्या चुनें। 10 सेकंड लगते हैं।", "Select one or more issues, then tap Send": "चुनें और भेजें दबाएँ", "Other / Custom Issue": "अन्य समस्या", "Describe any other issue here...": "समस्या यहाँ लिखें...", "Add a Photo (optional)": "फ़ोटो जोड़ें (वैकल्पिक)", "Take Photo": "फ़ोटो लें", "From Library": "गैलरी से", "Send Report →": "रिपोर्ट भेजें →", "Sending...": "भेजा जा रहा है...", "Report Sent!": "रिपोर्ट भेज दी गई!", "The team has been notified and is on the way.": "टीम को सूचित कर दिया गया है।", "Report Another Issue": "एक और समस्या रिपोर्ट करें", "Speak": "बोलें", "Listening...": "सुन रहा है...", "Low": "कम", "Medium": "मध्यम", "High": "उच्च", "AI Suggestion — review & confirm": "एआई सुझाव — जाँचें और पुष्टि करें", "Suggested severity": "सुझाई गई गंभीरता", "Description (editable)": "विवरण (संपादन योग्य)", "Active Issues": "सक्रिय समस्याएँ", "Resolved": "हल हो गया", "Fixed It": "ठीक हो गया", "No active issues": "कोई सक्रिय समस्या नहीं", "Dashboard": "डैशबोर्ड", "Manage": "प्रबंधित करें", "Account": "खाता", "Refresh": "रिफ्रेश", "Log Out": "लॉग आउट", "Language": "भाषा" },
+  zh: { "Safety & Hazards": "安全与隐患", "Security & Facilities": "安保与设施", "Maintenance & Repairs": "维护与维修", "Cleaning & Sanitation": "清洁与卫生", "Supplies": "物资", "Wet Floor / Spill": "地面湿滑 / 洒漏", "Blocked Exit / Aisle": "出口 / 通道堵塞", "Trip / Fall Hazard": "绊倒 / 跌倒风险", "Near-Miss / Incident": "险情 / 事故", "PPE / Equipment Unsafe": "防护装备不安全", "Access / Door Issue": "门禁 / 门的问题", "Property Damage": "财产损坏", "Suspicious Activity": "可疑活动", "Lighting Out / Flickering": "灯光故障 / 闪烁", "HVAC / Temperature Issue": "空调 / 温度问题", "Broken Fixture / Door": "设施 / 门损坏", "Equipment Issue": "设备问题", "Spill / Mess Needs Cleanup": "需要清理", "Restroom Needs Attention": "洗手间需要处理", "Trash / Bins Full": "垃圾桶已满", "No Soap": "没有肥皂", "No Paper Towels": "没有纸巾", "No Toilet Paper": "没有厕纸", "No Hand Sanitizer": "没有消毒液", "Breakroom Restock": "休息室补货", "Report a Facility Issue": "报告设施问题", "Select the issue(s). Takes 10 seconds.": "选择问题,只需10秒。", "Select one or more issues, then tap Send": "选择后点击发送", "Other / Custom Issue": "其他问题", "Describe any other issue here...": "在此描述问题...", "Add a Photo (optional)": "添加照片(可选)", "Take Photo": "拍照", "From Library": "从相册选择", "Send Report →": "发送报告 →", "Sending...": "发送中...", "Report Sent!": "报告已发送!", "The team has been notified and is on the way.": "团队已收到通知,正在处理。", "Report Another Issue": "报告另一个问题", "Speak": "说话", "Listening...": "正在听...", "Low": "低", "Medium": "中", "High": "高", "AI Suggestion — review & confirm": "AI 建议 — 请确认", "Suggested severity": "建议严重程度", "Description (editable)": "描述(可编辑)", "Active Issues": "待处理问题", "Resolved": "已解决", "Fixed It": "已修复", "No active issues": "暂无待处理问题", "Dashboard": "仪表板", "Manage": "管理", "Account": "账户", "Refresh": "刷新", "Log Out": "退出登录", "Language": "语言" },
 };
+
+// ── DASHBOARD TRANSLATION LAYER ──────────────────────────────────
+// Static UI strings come from the TR dictionary (instant, offline).
+// Dynamic alert text (issue descriptions, AI details) is translated on
+// demand through /api/translate and cached in-memory so the 30s dashboard
+// poll never re-translates the same string twice.
+const _translationCache = new Map(); // `${lang}::${text}` -> translated
+
+async function translateDynamic(text, lang) {
+  const clean = String(text || "").trim();
+  if (!clean || !lang || lang === "en") return clean;
+  const key = `${lang}::${clean}`;
+  if (_translationCache.has(key)) return _translationCache.get(key);
+  try {
+    const res = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: clean, target: lang }),
+    });
+    if (!res.ok) return clean;
+    const data = await res.json();
+    const out = data.translated || data.english || clean;
+    _translationCache.set(key, out);
+    return out;
+  } catch (e) { return clean; }
+}
+
+// Translates a batch of alert rows, returning a lookup map keyed by record id.
+// Fails soft: any row that can't be translated keeps its original text.
+async function translateAlerts(alerts, lang) {
+  if (!lang || lang === "en" || !alerts.length) return {};
+  const entries = await Promise.all(
+    alerts.slice(0, 25).map(async (a) => {
+      const source = a.status || (a.supply && a.supply.label) || "";
+      const translated = await translateDynamic(source, lang);
+      return [a.id, translated];
+    })
+  );
+  return Object.fromEntries(entries);
+}
 
 // Translate a plain string; returns English when no translation exists.
 function tr(lang, s) { return (TR[lang] && TR[lang][s]) || s; }
@@ -624,8 +664,17 @@ export default function App() {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [aiSeverity, setAiSeverity] = useState("");
   const [aiDescription, setAiDescription] = useState("");
+  const [aiTags, setAiTags] = useState([]);
+  const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
+  // Dashboard viewer's preferred language. Persisted per browser so a manager
+  // who reads Spanish keeps Spanish across sessions. Independent of reportLang
+  // (which is the worker's language on the report page).
+  const [dashLang, setDashLang] = useState(() => {
+    try { return localStorage.getItem("sp_dash_lang") || "en"; } catch (e) { return "en"; }
+  });
+  const [translatedAlerts, setTranslatedAlerts] = useState({}); // id -> translated status
   const [listening, setListening] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -740,6 +789,18 @@ export default function App() {
     const interval = setInterval(() => { fetchReports(scope).then(data => setAlerts(data)); }, 30000);
     return () => clearInterval(interval);
   }, [screen, alertEmail, email, location, rooms]);
+
+  // Translate visible alert text whenever the language or the alert set
+  // changes. Cached upstream, so the 30s poll costs nothing extra.
+  useEffect(() => {
+    let cancelled = false;
+    if (dashLang === "en") { setTranslatedAlerts({}); return; }
+    translateAlerts(alerts, dashLang).then(map => { if (!cancelled) setTranslatedAlerts(map); });
+    return () => { cancelled = true; };
+  }, [alerts, dashLang]);
+
+  // Convenience: static dashboard string translator
+  const dt = (s) => tr(dashLang, s);
 
   // 14-day trial countdown — based on the account's REAL Supabase signup
   // timestamp, not a stored guess, so it can't drift or be reset by accident.
@@ -1008,7 +1069,7 @@ export default function App() {
           </a>
         </div>
         <div style={{ marginTop: 48, paddingTop: 32, borderTop: "1px solid #222", display: "flex", justifyContent: "center", gap: 32, fontSize: 13, color: "#444", flexWrap: "wrap" }}>
-          {[{ icon: "📧", text: "hello@supplyping.com" }, { icon: "📞", text: "313-591-3484" }, { icon: "🌐", text: "supplyping.com" }, { icon: "📍", text: "Metro Detroit, MI" }].map(t => (
+          {[{ icon: "📧", text: "hello@supplyping.com" }, { icon: "📞", text: "313-591-3484" }, { icon: "🌐", text: "supplyping.com" }, { icon: "📍", text: "Serving facilities nationwide" }].map(t => (
             <span key={t.text} style={{ display: "flex", alignItems: "center", gap: 6 }}>{t.icon} {t.text}</span>
           ))}
         </div>
@@ -1016,7 +1077,7 @@ export default function App() {
           <div style={{ fontWeight: 700, color: "#777", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>SMS Alerts — Terms &amp; Consent</div>
           <p style={{ margin: "0 0 8px" }}>SupplyPing sends SMS text alerts to facility operators and cleaning teams who opt in during account setup. By providing a mobile number and checking the consent box, you agree to receive recurring facility-alert text messages from SupplyPing. Message frequency varies based on facility activity. Message and data rates may apply.</p>
           <p style={{ margin: "0 0 8px" }}>Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at hello@supplyping.com or 313-591-3484. Consent to receive SMS is not a condition of purchase.</p>
-          <p style={{ margin: 0 }}>We do not sell or share mobile information with third parties for marketing. © 2026 SupplyPing, Metro Detroit, MI.</p>
+          <p style={{ margin: 0 }}>We do not sell or share mobile information with third parties for marketing. © 2026 SupplyPing. Serving facilities across the United States.</p>
         </div>
       </div>
     </div>
@@ -1303,6 +1364,18 @@ export default function App() {
             <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>{bizName || "Facility Operations"}</div>
           </div>
         </div>
+        <select
+          value={dashLang}
+          onChange={(e) => {
+            const v = e.target.value;
+            setDashLang(v);
+            try { localStorage.setItem("sp_dash_lang", v); } catch (err) {}
+          }}
+          title="Dashboard language"
+          style={{ fontFamily: font.body, fontSize: 12, fontWeight: 600, color: T.ink, background: T.white, border: `1.5px solid ${T.border}`, borderRadius: 100, padding: "6px 10px", cursor: "pointer", outline: "none" }}
+        >
+          {LANGS.map(l => <option key={l.id} value={l.id}>🌐 {l.label}</option>)}
+        </select>
         {trialDaysLeft !== null && (
           <div style={{
             fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 100,
@@ -1318,9 +1391,9 @@ export default function App() {
           </div>
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 0" }}>
-          <Btn label="📋 Status" onClick={() => nav("status")} variant="outline" size="sm" />
-          <Btn label="📍 Manage" onClick={() => nav("manage")} variant="outline" size="sm" />
-          <Btn label="⚙️ Account" onClick={() => nav("account")} variant="outline" size="sm" />
+          <Btn label={`📋 ${dt("Status")}`} onClick={() => nav("status")} variant="outline" size="sm" />
+          <Btn label={`📍 ${dt("Manage")}`} onClick={() => nav("manage")} variant="outline" size="sm" />
+          <Btn label={`⚙️ ${dt("Account")}`} onClick={() => nav("account")} variant="outline" size="sm" />
           <Btn label={loadingReports ? "⏳" : "🔄 Refresh"} onClick={() => { setLoadingReports(true); fetchReports({ emails: [alertEmail, email], location, rooms: (rooms || []).map(r => r.name) }).then(data => { setAlerts(data); setLoadingReports(false); showToast("✅ Refreshed!", T.green); }); }} variant="outline" size="sm" />
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
@@ -1361,7 +1434,7 @@ export default function App() {
         </div>
 
         <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>
-          Active Issues <span style={{ marginLeft: 8, fontSize: 10, color: T.orange, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>Live · auto-refreshes every 30s</span>
+          {dt("Active Issues")} <span style={{ marginLeft: 8, fontSize: 10, color: T.orange, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>Live · 30s</span>
         </div>
 
         {loadingReports ? (
@@ -1377,12 +1450,17 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                   <div style={{ fontSize: 32 }}>{a.supply.emoji}</div>
                   <div>
-                    <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{a.status || a.supply.label}</div>
+                    <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>
+                      {translatedAlerts[a.id] || a.status || a.supply.label}
+                    </div>
+                    {translatedAlerts[a.id] && translatedAlerts[a.id] !== (a.status || a.supply.label) && (
+                      <div style={{ fontSize: 10.5, color: T.dim, marginTop: 2, fontStyle: "italic" }}>{a.status || a.supply.label}</div>
+                    )}
                     <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>{a.room} · {a.stall}{a.location ? ` · ${a.location}` : ""} · {a.time}</div>
                     {a.cleaningEmail && <div style={{ fontSize: 11, color: T.green, marginTop: 2 }}>✅ Alert sent to {a.cleaningEmail}</div>}
                   </div>
                 </div>
-                <Btn label="✓ Fixed It" onClick={() => resolve(a.id)} variant="green" size="sm" />
+                <Btn label={`✓ ${dt("Fixed It")}`} onClick={() => resolve(a.id)} variant="green" size="sm" />
               </div>
             ))}
           </div>
@@ -1390,7 +1468,7 @@ export default function App() {
 
         {resolved.length > 0 && (
           <>
-            <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 12 }}>Resolved</div>
+            <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 12 }}>{dt("Resolved")}</div>
             {resolved.map(a => (
               <div key={a.id} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, opacity: 0.55 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, color: T.muted }}>
@@ -1624,7 +1702,7 @@ export default function App() {
                 {photoPreview ? (
                   <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `2px solid ${T.green}`, boxShadow: T.shadow }}>
                     <img src={photoPreview} alt="Issue" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
-                    <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiAnalyzing(false); setAiSeverity(""); setAiDescription(""); }}
+                    <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiAnalyzing(false); setAiSeverity(""); setAiDescription(""); setAiTags([]); setAiImmediateRisk(false); }}
                       style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.65)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontFamily: font.body, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                       ✕ Remove
                     </button>
@@ -1661,6 +1739,8 @@ export default function App() {
                           // Worker sees the description in THEIR language; English
                           // is reconstructed at submit for supervisors.
                           setAiDescription(ai.description_local || ai.description || "");
+                          setAiTags(Array.isArray(ai.tags) ? ai.tags : []);
+                          setAiImmediateRisk(ai.immediate_risk === true);
                           const match = ALL_ITEMS.find(s => s.label.includes(ai.item) || ai.item.includes(s.label.replace(/^\S+\s/, "")));
                           if (match) setReportIssues(prev => prev.includes(match.id) ? prev : [...prev, match.id]);
                         }
@@ -1683,6 +1763,8 @@ export default function App() {
                           // Worker sees the description in THEIR language; English
                           // is reconstructed at submit for supervisors.
                           setAiDescription(ai.description_local || ai.description || "");
+                          setAiTags(Array.isArray(ai.tags) ? ai.tags : []);
+                          setAiImmediateRisk(ai.immediate_risk === true);
                           const match = ALL_ITEMS.find(s => s.label.includes(ai.item) || ai.item.includes(s.label.replace(/^\S+\s/, "")));
                           if (match) setReportIssues(prev => prev.includes(match.id) ? prev : [...prev, match.id]);
                         }
@@ -1703,6 +1785,16 @@ export default function App() {
                         <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 10 }}>
                           {tr(reportLang, aiSuggestion.item)}{!aiSuggestion.confident && <span style={{ fontWeight: 500, color: T.muted }}> (low confidence — please verify)</span>}
                         </div>
+                        {aiTags.length > 0 && (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                            {aiImmediateRisk && (
+                              <span style={{ fontSize: 10, fontWeight: 800, color: T.red, background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5 }}>⚠️ IMMEDIATE RISK</span>
+                            )}
+                            {aiTags.map(t => (
+                              <span key={t} style={{ fontSize: 10, fontWeight: 700, color: T.muted, background: T.cream, border: `1px solid ${T.border}`, borderRadius: 100, padding: "3px 9px" }}>{t}</span>
+                            ))}
+                          </div>
+                        )}
                         <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{tr(reportLang, "Suggested severity")}</div>
                         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                           {["Low", "Medium", "High"].map(s => (
@@ -1814,6 +1906,10 @@ export default function App() {
               const extendedFields = { ...reportFields };
               if (aiSeverity) extendedFields["Severity"] = aiSeverity;
               if (aiDescEn) extendedFields["Details"] = aiDescEn;
+              // Optional fields — airtableWrite() removes them automatically if
+              // the columns don't exist, so no schema change is required.
+              if (aiTags.length) extendedFields["Hazard Tags"] = aiTags.join(", ");
+              if (aiImmediateRisk) extendedFields["Immediate Risk"] = true;
               // Bathroom Status = high-level operational state of the room,
               // distinct from Status (the specific issue). Restroom/cleaning
               // issues take the room out of service; everything else flags it.
@@ -1849,6 +1945,8 @@ export default function App() {
                   issueString,
                   aiSeverity ? `Severity: ${aiSeverity}` : "",
                   aiDescEn ? `Details: ${aiDescEn}` : "",
+                  aiImmediateRisk ? "⚠️ IMMEDIATE RISK" : "",
+                  aiTags.length ? `Tags: ${aiTags.join(", ")}` : "",
                   photoUrl ? `📷 Photo: ${photoUrl}` : ""
                 ].filter(Boolean).join(" — "),
                 location: locName,
@@ -1875,7 +1973,7 @@ export default function App() {
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>{tr(reportLang, "Report Sent!")}</h2>
             <p style={{ color: T.muted, fontSize: 15 }}>{tr(reportLang, "The team has been notified and is on the way.")}</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Btn label={tr(reportLang, "Report Another Issue")} onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setReportDone(false); }} variant="outline" />
+              <Btn label={tr(reportLang, "Report Another Issue")} onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setAiTags([]); setAiImmediateRisk(false); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
             </div>
           </div>

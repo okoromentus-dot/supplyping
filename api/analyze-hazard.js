@@ -17,6 +17,15 @@ const ITEMS = [
   "No Soap", "No Paper Towels", "No Toilet Paper", "No Hand Sanitizer", "Breakroom Restock",
 ];
 
+// Controlled vocabulary for safety classification tags. A fixed list keeps the
+// output filterable and prevents the model from inventing arbitrary labels.
+const HAZARD_TAGS = [
+  "slip-trip-fall", "blocked-egress", "electrical", "chemical-spill",
+  "equipment-damage", "ppe-missing", "fire-risk", "sharp-object",
+  "biohazard", "structural", "lighting", "temperature",
+  "sanitation", "supply-shortage", "security", "no-hazard-visible",
+];
+
 export default async function handler(req, res) {
   // CORS for the frontend
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -41,7 +50,12 @@ Choose the single best match from this exact list of issue types:
 ${ITEMS.map((i) => `- ${i}`).join("\n")}
 
 Respond with ONLY a JSON object, no other text, in this shape:
-{"item": "<exact issue type from the list>", "severity": "Low" | "Medium" | "High", "description": "<one or two factual sentences in ENGLISH describing what is visible and where the concern is. Plain language, no speculation beyond what is visible.>", "description_local": ${lang && lang !== "en" ? `"<the same description translated into the language with code '${String(lang).slice(0,5)}'>"` : "null"}, "confident": true | false}
+{"item": "<exact issue type from the list>", "severity": "Low" | "Medium" | "High", "tags": ["<1 to 3 tags from the tag list below>"], "immediate_risk": true | false, "description": "<one or two factual sentences in ENGLISH describing what is visible and where the concern is. Plain language, no speculation beyond what is visible.>", "description_local": ${lang && lang !== "en" ? `"<the same description translated into the language with code '${String(lang).slice(0,5)}'>"` : "null"}, "confident": true | false}
+
+Tag list (use ONLY these, 1-3 that apply):
+${HAZARD_TAGS.join(", ")}
+
+Set "immediate_risk": true only when someone could plausibly be injured within the next few minutes if nobody intervenes.
 
 Severity guide: High = immediate injury risk or blocked emergency egress. Medium = should be addressed today. Low = routine.
 If the photo does not clearly show a facility issue, set "confident": false and pick the closest plausible item.`;
@@ -82,6 +96,11 @@ If the photo does not clearly show a facility issue, set "confident": false and 
     // Validate against the known list; fall back safely
     if (!ITEMS.includes(parsed.item)) parsed.item = null;
     if (!["Low", "Medium", "High"].includes(parsed.severity)) parsed.severity = "Medium";
+    // Keep only tags from the controlled vocabulary, max 3.
+    parsed.tags = Array.isArray(parsed.tags)
+      ? parsed.tags.filter(t => HAZARD_TAGS.includes(t)).slice(0, 3)
+      : [];
+    parsed.immediate_risk = parsed.immediate_risk === true;
     parsed.description = String(parsed.description || "").slice(0, 400);
     parsed.description_local = parsed.description_local ? String(parsed.description_local).slice(0, 400) : null;
 
