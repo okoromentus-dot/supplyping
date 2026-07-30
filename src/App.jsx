@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 
 // ── CONFIG ──
@@ -687,6 +687,10 @@ export default function App() {
   });
   const [translatedAlerts, setTranslatedAlerts] = useState({}); // id -> translated status
   const [listening, setListening] = useState(false);
+  // Holding the recognizer in a ref is required: a local variable can be
+  // garbage-collected while recognition is still running, which makes voice
+  // input fail silently on some mobile browsers.
+  const recogRef = useRef(null);
   const [reportDone, setReportDone] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
@@ -1696,21 +1700,59 @@ export default function App() {
                   <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder={tr(reportLang, "Describe any other issue here...")}
                     dir={reportLang === "ar" ? "rtl" : "ltr"}
                     style={{ flex: 1, border: `2px solid ${otherText ? T.ink : T.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.white, outline: "none", boxSizing: "border-box", boxShadow: T.shadow }} />
-                  {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
-                    <button type="button" onClick={() => {
-                      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                  <button type="button" onClick={async () => {
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (!SR) {
+                      showToast("🎤 This browser doesn't support voice input. Try Safari on iPhone or Chrome on Android — or just type it.", T.yellow);
+                      return;
+                    }
+                    // Stop an in-progress session if the user taps again.
+                    if (listening && recogRef.current) {
+                      try { recogRef.current.stop(); } catch (e) {}
+                      setListening(false);
+                      return;
+                    }
+                    try {
                       const rec = new SR();
+                      recogRef.current = rec; // keep alive
                       rec.lang = (LANGS.find(l => l.id === reportLang) || LANGS[0]).voice;
                       rec.interimResults = false;
-                      rec.onresult = (ev) => { const t = ev.results[0][0].transcript; setOtherText(prev => (prev ? prev + " " : "") + t); setListening(false); };
-                      rec.onerror = () => setListening(false);
-                      rec.onend = () => setListening(false);
-                      setListening(true); rec.start();
-                    }}
-                      style={{ width: 52, borderRadius: 12, border: `2px solid ${listening ? T.red : T.border}`, background: listening ? T.redLight : T.white, cursor: "pointer", fontSize: 20, boxShadow: T.shadow }}>
-                      {listening ? "🔴" : "🎤"}
-                    </button>
-                  )}
+                      rec.maxAlternatives = 1;
+                      rec.continuous = false;
+
+                      rec.onstart = () => { setListening(true); };
+                      rec.onresult = (ev) => {
+                        const t = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : "";
+                        if (t) setOtherText(prev => (prev ? prev + " " : "") + t);
+                        else showToast("🎤 Didn't catch that — try again, a bit closer.", T.yellow);
+                        setListening(false);
+                      };
+                      rec.onerror = (ev) => {
+                        setListening(false);
+                        const code = ev && ev.error ? ev.error : "unknown";
+                        console.error("[Voice] recognition error:", code, ev);
+                        const msg = {
+                          "not-allowed": "Microphone blocked. Allow mic access for this site in your browser settings, then try again.",
+                          "service-not-allowed": "Microphone blocked by the browser or OS. Check your phone's microphone permission for this browser.",
+                          "audio-capture": "No microphone found on this device.",
+                          "no-speech": "Didn't hear anything — tap and speak right after the tone.",
+                          "network": "Voice input needs a connection. You're offline, so please type instead.",
+                          "aborted": "Voice input stopped.",
+                        }[code] || `Voice input failed (${code}). Please type instead.`;
+                        showToast(`🎤 ${msg}`, T.yellow);
+                      };
+                      rec.onend = () => { setListening(false); };
+
+                      rec.start();
+                    } catch (e) {
+                      setListening(false);
+                      console.error("[Voice] could not start:", e);
+                      showToast("🎤 Couldn't start voice input on this device — please type instead.", T.yellow);
+                    }
+                  }}
+                    style={{ width: 52, borderRadius: 12, border: `2px solid ${listening ? T.red : T.border}`, background: listening ? T.redLight : T.white, cursor: "pointer", fontSize: 20, boxShadow: T.shadow }}>
+                    {listening ? "🔴" : "🎤"}
+                  </button>
                 </div>
                 {listening && <div style={{ fontSize: 12, color: T.red, marginTop: 6, fontWeight: 600 }}>{tr(reportLang, "Listening...")}</div>}
               </div>
