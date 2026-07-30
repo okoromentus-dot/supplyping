@@ -359,6 +359,43 @@ const AREA_TYPES = [
   { id: "supply", label: "🧻 Restroom / Supplies" },
 ];
 
+// ── TEAM ROUTING ─────────────────────────────────────────────────
+// Each report reaches the team that owns that category. Routing is driven by
+// the ISSUE CATEGORY rather than the QR code, so existing printed codes keep
+// working and nothing needs reprinting. Any team without an address falls back
+// to the primary alert email — a client who sets only one email keeps today's
+// behaviour exactly.
+function categoryForItem(itemId) {
+  for (const cat of [...SUPPLY_CATEGORIES, ...WAREHOUSE_CATEGORIES]) {
+    if (cat.items.some(i => i.id === itemId)) return cat.id;
+  }
+  return null;
+}
+
+function routeRecipients(itemIds, teams, fallback) {
+  const out = new Set();
+  (itemIds || []).forEach((id) => {
+    const cat = categoryForItem(id);
+    const key = cat === "warehouse" ? "safety" : cat; // warehouse issues are safety issues
+    const addr = (key && teams && teams[key]) || fallback;
+    if (addr) out.add(addr);
+  });
+  if (out.size === 0 && fallback) out.add(fallback);
+  return Array.from(out);
+}
+
+// Which teams a set of issues would notify — used to show the routing preview.
+function teamsForItems(itemIds) {
+  const labels = { safety: "Safety", security: "Security", maint: "Maintenance", clean: "Cleaning", supply: "Supplies" };
+  const out = new Set();
+  (itemIds || []).forEach((id) => {
+    const cat = categoryForItem(id);
+    const key = cat === "warehouse" ? "safety" : cat;
+    if (key && labels[key]) out.add(labels[key]);
+  });
+  return Array.from(out);
+}
+
 const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal, categoryVal) => {
   const base = "https://supplyping.com/r";
   const params = new URLSearchParams();
@@ -586,6 +623,12 @@ async function loadClientData(email) {
       rooms: Array.isArray(rooms) && rooms.length > 0 ? rooms : null,
       facility: f["Facility Name"] || "",
       cleaningEmail: f["Cleaning Team Email"] || "",
+      teamEmails: {
+        safety: f["Safety Team Email"] || "",
+        security: f["Security Team Email"] || "",
+        maint: f["Maintenance Team Email"] || "",
+        supply: f["Supplies Team Email"] || "",
+      },
       bizName: f["Business Name"] || "",
       phone: f["Phone Number"] || "",
     };
@@ -663,6 +706,9 @@ export default function App() {
   const [location, setLocation] = useState("");
   const [rooms, setRooms] = useState([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Loading Dock", stalls: 1, category: "safety" }]);
   const [alertEmail, setAlertEmail] = useState("");
+  // Optional per-team addresses. Blank means "use the primary alert email".
+  const [teamEmails, setTeamEmails] = useState({ safety: "", security: "", maint: "", supply: "" });
+  const [showTeamRouting, setShowTeamRouting] = useState(false);
   const [alertPhone, setAlertPhone] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
   const [testSent, setTestSent] = useState(false);
@@ -786,6 +832,8 @@ export default function App() {
       const ce = profile?.cleaningEmail || backup?.alertEmail;
       const ph = profile?.phone || backup?.alertPhone;
       const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
+      const te = profile?.teamEmails || backup?.teamEmails;
+      if (te) setTeamEmails(prev => ({ ...prev, ...te }));
       if (biz) setBizName(biz);
       if (fac) setLocation(fac);
       if (ce) setAlertEmail(ce);
@@ -1180,6 +1228,8 @@ export default function App() {
             const ce = profile?.cleaningEmail || backup?.alertEmail;
             const ph = profile?.phone || backup?.alertPhone;
             const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
+            const te = profile?.teamEmails || backup?.teamEmails;
+            if (te) setTeamEmails(prev => ({ ...prev, ...te }));
             if (biz) setBizName(biz);
             if (fac) setLocation(fac);
             if (ce) setAlertEmail(ce);
@@ -1294,7 +1344,39 @@ export default function App() {
             <div style={{ fontSize: 44, marginBottom: 16 }}>🔔</div>
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>Set up instant alerts</h2>
             <p style={{ color: T.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>Enter your team's contact info. They'll be notified instantly when an issue is reported.</p>
-            <Input label="Cleaning / Operations Team Email" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
+            <Input label="Primary Alert Email" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
+            <div style={{ fontSize: 12, color: T.muted, marginTop: -6, marginBottom: 14, lineHeight: 1.5 }}>
+              Every report goes here unless you route specific teams below.
+            </div>
+
+            {/* Optional per-team routing */}
+            <div style={{ border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, background: T.cream }}>
+              <button type="button" onClick={() => setShowTeamRouting(v => !v)}
+                style={{ width: "100%", background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: font.body, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>👥 Route to different teams (optional)</span>
+                <span style={{ fontSize: 13, color: T.muted }}>{showTeamRouting ? "−" : "+"}</span>
+              </button>
+              {showTeamRouting && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.55, marginBottom: 12 }}>
+                    Send each type of report to the team that handles it. Leave blank to use the primary email. Your existing QR codes keep working — routing is based on what the worker reports, not which code they scan.
+                  </div>
+                  {[
+                    ["safety", "⚠️ Safety & Hazards", "safety@yourbusiness.com"],
+                    ["security", "🔒 Security & Facilities", "security@yourbusiness.com"],
+                    ["maint", "🔧 Maintenance & Repairs", "maintenance@yourbusiness.com"],
+                    ["supply", "🧻 Supplies", "supplies@yourbusiness.com"],
+                  ].map(([key, label, ph]) => (
+                    <Input key={key} label={label} value={teamEmails[key]}
+                      onChange={(v) => setTeamEmails(prev => ({ ...prev, [key]: v }))}
+                      placeholder={ph} type="email" />
+                  ))}
+                  <div style={{ fontSize: 11.5, color: T.dim, lineHeight: 1.5 }}>
+                    🧹 Cleaning &amp; Sanitation reports go to your primary email above.
+                  </div>
+                </div>
+              )}
+            </div>
             <Input label="Team Phone (for SMS — optional)" value={alertPhone} onChange={setAlertPhone} placeholder="+1 313 000 0000" />
             <div style={{ background: T.cream, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
               <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
@@ -1313,11 +1395,18 @@ export default function App() {
             </div>
             <Btn label="Generate My QR Codes →" onClick={async () => {
               const fields = { "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Cleaning Team Email": alertEmail, "Phone Number": alertPhone, "Facility Name": location, "Plan": "Trial", "Client Status": "Trial", "Locations": JSON.stringify(rooms) };
+              // Optional team addresses. airtableWrite() removes any of these
+              // automatically if the columns don't exist, so no schema change
+              // is required to deploy this.
+              if (teamEmails.safety) fields["Safety Team Email"] = teamEmails.safety;
+              if (teamEmails.security) fields["Security Team Email"] = teamEmails.security;
+              if (teamEmails.maint) fields["Maintenance Team Email"] = teamEmails.maint;
+              if (teamEmails.supply) fields["Supplies Team Email"] = teamEmails.supply;
               const savedOk = await saveLocationsToAirtable(email, rooms, fields);
               // Local backup: if Airtable is unavailable or rejects the write,
               // the setup still survives a logout on this device rather than
               // forcing the client through onboarding again.
-              saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms });
+              saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
               if (!savedOk) showToast("⚠️ Setup saved on this device, but syncing failed — contact support if it disappears.", T.yellow);
               setStep(4);
             }} disabled={!alertEmail} variant="primary" full />
@@ -1419,7 +1508,7 @@ export default function App() {
           <Btn label={`🚪 ${dt("Log Out")}`} onClick={async () => {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
-            setLocation(""); setAlertEmail(""); setAlertPhone("");
+            setLocation(""); setAlertEmail(""); setAlertPhone(""); setTeamEmails({ safety: "", security: "", maint: "", supply: "" });
             setRooms([{ name: "Warehouse Floor", stalls: 2, category: "warehouse" }, { name: "Loading Dock", stalls: 1, category: "safety" }]);
             showToast("👋 Logged out successfully!", T.green);
             nav("landing");
@@ -1554,12 +1643,41 @@ export default function App() {
           <Btn label="🚪 Log Out" onClick={async () => {
             await supabase.auth.signOut();
             setBizName(""); setEmail(""); setPassword(""); setIndustry("");
-            setLocation(""); setAlertEmail(""); setAlertPhone("");
+            setLocation(""); setAlertEmail(""); setAlertPhone(""); setTeamEmails({ safety: "", security: "", maint: "", supply: "" });
             nav("landing");
           }} variant="outline" size="sm" />
         </div>
       </header>
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
+        {/* Team routing — editable after onboarding */}
+        <Card style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>👥 Alert Routing</div>
+          <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 14px", lineHeight: 1.55 }}>
+            Reports are routed by what's reported, not by which QR code is scanned — so your printed codes never need reprinting. Leave a team blank to send its reports to the primary address.
+          </p>
+          <Input label="Primary Alert Email (fallback for all teams)" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
+          {[
+            ["safety", "⚠️ Safety & Hazards", "safety@yourbusiness.com"],
+            ["security", "🔒 Security & Facilities", "security@yourbusiness.com"],
+            ["maint", "🔧 Maintenance & Repairs", "maintenance@yourbusiness.com"],
+            ["supply", "🧻 Supplies", "supplies@yourbusiness.com"],
+          ].map(([key, label, ph]) => (
+            <Input key={key} label={label} value={teamEmails[key]}
+              onChange={(v) => setTeamEmails(prev => ({ ...prev, [key]: v }))}
+              placeholder={ph} type="email" />
+          ))}
+          <Btn label="Save Routing →" onClick={async () => {
+            const extra = { "Facility Name": location, "Cleaning Team Email": alertEmail };
+            if (teamEmails.safety) extra["Safety Team Email"] = teamEmails.safety;
+            if (teamEmails.security) extra["Security Team Email"] = teamEmails.security;
+            if (teamEmails.maint) extra["Maintenance Team Email"] = teamEmails.maint;
+            if (teamEmails.supply) extra["Supplies Team Email"] = teamEmails.supply;
+            const ok = await saveLocationsToAirtable(email, rooms, extra);
+            saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
+            showToast(ok ? "✅ Routing saved" : "⚠️ Saved on this device — sync failed", ok ? T.green : T.yellow);
+          }} variant="primary" full />
+        </Card>
+
         <Card style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 14 }}>+ Add New Location</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", marginBottom: 12 }}>
@@ -2002,7 +2120,11 @@ export default function App() {
               // 2) EmailJS alert (or offline queue).
               // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
               // management is always CC'd via the combined recipient list.
-              const recipients = [cleaningEmail, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
+              // Route to the team that owns each reported category. Falls back
+              // to the QR/primary address for any team without its own inbox.
+              const routed = routeRecipients(reportIssues, { ...teamEmails, clean: cleaningEmail }, cleaningEmail);
+              const notifiedTeams = teamsForItems(reportIssues);
+              const recipients = [...routed, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
               const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
                 to_email: recipients,
@@ -2014,6 +2136,7 @@ export default function App() {
                   aiDescEn ? `Details: ${aiDescEn}` : "",
                   aiImmediateRisk ? "⚠️ IMMEDIATE RISK" : "",
                   aiTags.length ? `Tags: ${aiTags.join(", ")}` : "",
+                  notifiedTeams.length ? `Team: ${notifiedTeams.join(" + ")}` : "",
                   photoUrl ? `📷 Photo: ${photoUrl}` : ""
                 ].filter(Boolean).join(" — "),
                 location: locName,
