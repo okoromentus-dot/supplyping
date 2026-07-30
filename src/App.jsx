@@ -862,6 +862,48 @@ export default function App() {
     return () => { cancelled = true; };
   }, [alerts, dashLang]);
 
+  // Alert routing editor — one definition used on both the Dashboard and the
+  // Manage screen so the two can never drift apart.
+  const saveRouting = async () => {
+    const extra = { "Facility Name": location, "Cleaning Team Email": alertEmail };
+    if (teamEmails.safety) extra["Safety Team Email"] = teamEmails.safety;
+    if (teamEmails.security) extra["Security Team Email"] = teamEmails.security;
+    if (teamEmails.maint) extra["Maintenance Team Email"] = teamEmails.maint;
+    if (teamEmails.supply) extra["Supplies Team Email"] = teamEmails.supply;
+    const ok = await saveLocationsToAirtable(email, rooms, extra);
+    saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
+    showToast(ok ? "✅ Routing saved" : "⚠️ Saved on this device — sync failed", ok ? T.green : T.yellow);
+  };
+
+  const TEAM_FIELDS = [
+    ["safety", "⚠️ Safety & Hazards", "safety@yourbusiness.com"],
+    ["security", "🔒 Security & Facilities", "security@yourbusiness.com"],
+    ["maint", "🔧 Maintenance & Repairs", "maintenance@yourbusiness.com"],
+    ["supply", "🧻 Supplies", "supplies@yourbusiness.com"],
+  ];
+
+  // Plain-language summary of where alerts currently go.
+  const routingSummary = () => {
+    const set = TEAM_FIELDS.filter(([k]) => teamEmails[k]).length;
+    if (!set) return alertEmail ? `All reports → ${alertEmail}` : "No alert email set yet";
+    return `${set} team${set > 1 ? "s" : ""} routed separately · everything else → ${alertEmail || "—"}`;
+  };
+
+  const routingEditor = (
+    <>
+      <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 14px", lineHeight: 1.55 }}>
+        Reports route by what's reported, not by which QR code is scanned — so your printed codes never need reprinting. Leave a team blank to send its reports to the primary address.
+      </p>
+      <Input label="Primary Alert Email (fallback for all teams)" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
+      {TEAM_FIELDS.map(([key, label, ph]) => (
+        <Input key={key} label={label} value={teamEmails[key]}
+          onChange={(v) => setTeamEmails(prev => ({ ...prev, [key]: v }))}
+          placeholder={ph} type="email" />
+      ))}
+      <Btn label="Save Routing →" onClick={saveRouting} variant="primary" full />
+    </>
+  );
+
   // Convenience: static dashboard string translators
   const dt = (s) => tr(dashLang, s);
   const dtf = (s, vars) => trf(dashLang, s, vars);
@@ -1649,33 +1691,11 @@ export default function App() {
         </div>
       </header>
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
-        {/* Team routing — editable after onboarding */}
+        {/* Team routing — shared editor */}
         <Card style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>👥 Alert Routing</div>
-          <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 14px", lineHeight: 1.55 }}>
-            Reports are routed by what's reported, not by which QR code is scanned — so your printed codes never need reprinting. Leave a team blank to send its reports to the primary address.
-          </p>
-          <Input label="Primary Alert Email (fallback for all teams)" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
-          {[
-            ["safety", "⚠️ Safety & Hazards", "safety@yourbusiness.com"],
-            ["security", "🔒 Security & Facilities", "security@yourbusiness.com"],
-            ["maint", "🔧 Maintenance & Repairs", "maintenance@yourbusiness.com"],
-            ["supply", "🧻 Supplies", "supplies@yourbusiness.com"],
-          ].map(([key, label, ph]) => (
-            <Input key={key} label={label} value={teamEmails[key]}
-              onChange={(v) => setTeamEmails(prev => ({ ...prev, [key]: v }))}
-              placeholder={ph} type="email" />
-          ))}
-          <Btn label="Save Routing →" onClick={async () => {
-            const extra = { "Facility Name": location, "Cleaning Team Email": alertEmail };
-            if (teamEmails.safety) extra["Safety Team Email"] = teamEmails.safety;
-            if (teamEmails.security) extra["Security Team Email"] = teamEmails.security;
-            if (teamEmails.maint) extra["Maintenance Team Email"] = teamEmails.maint;
-            if (teamEmails.supply) extra["Supplies Team Email"] = teamEmails.supply;
-            const ok = await saveLocationsToAirtable(email, rooms, extra);
-            saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
-            showToast(ok ? "✅ Routing saved" : "⚠️ Saved on this device — sync failed", ok ? T.green : T.yellow);
-          }} variant="primary" full />
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 4 }}>👥 Alert Routing</div>
+          <div style={{ fontSize: 12.5, color: T.green, fontWeight: 600, marginBottom: 12 }}>{routingSummary()}</div>
+          {routingEditor}
         </Card>
 
         <Card style={{ marginBottom: 28 }}>
