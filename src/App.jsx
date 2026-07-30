@@ -865,11 +865,17 @@ export default function App() {
   // Alert routing editor — one definition used on both the Dashboard and the
   // Manage screen so the two can never drift apart.
   const saveRouting = async () => {
-    const extra = { "Facility Name": location, "Cleaning Team Email": alertEmail };
-    if (teamEmails.safety) extra["Safety Team Email"] = teamEmails.safety;
-    if (teamEmails.security) extra["Security Team Email"] = teamEmails.security;
-    if (teamEmails.maint) extra["Maintenance Team Email"] = teamEmails.maint;
-    if (teamEmails.supply) extra["Supplies Team Email"] = teamEmails.supply;
+    // Always send every team field — including empty ones. Previously a blank
+    // field was omitted from the patch, which meant clearing an address in the
+    // UI left the old value in Airtable and routing never actually changed.
+    const extra = {
+      "Facility Name": location,
+      "Cleaning Team Email": alertEmail,
+      "Safety Team Email": teamEmails.safety || "",
+      "Security Team Email": teamEmails.security || "",
+      "Maintenance Team Email": teamEmails.maint || "",
+      "Supplies Team Email": teamEmails.supply || "",
+    };
     const ok = await saveLocationsToAirtable(email, rooms, extra);
     saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
     showToast(ok ? "✅ Routing saved" : "⚠️ Saved on this device — sync failed", ok ? T.green : T.yellow);
@@ -896,10 +902,28 @@ export default function App() {
       </p>
       <Input label="Primary Alert Email (fallback for all teams)" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
       {TEAM_FIELDS.map(([key, label, ph]) => (
-        <Input key={key} label={label} value={teamEmails[key]}
-          onChange={(v) => setTeamEmails(prev => ({ ...prev, [key]: v }))}
-          placeholder={ph} type="email" />
+        <div key={key} style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+            <label style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontFamily: font.body, fontWeight: 500 }}>{label}</label>
+            {teamEmails[key] ? (
+              <button type="button"
+                onClick={() => setTeamEmails(prev => ({ ...prev, [key]: "" }))}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: font.body, fontSize: 11, fontWeight: 700, color: T.red }}>
+                ✕ Remove
+              </button>
+            ) : (
+              <span style={{ fontSize: 10.5, color: T.dim, fontStyle: "italic" }}>uses primary</span>
+            )}
+          </div>
+          <input value={teamEmails[key]}
+            onChange={(e) => setTeamEmails(prev => ({ ...prev, [key]: e.target.value }))}
+            placeholder={ph} type="email"
+            style={{ width: "100%", border: `1.5px solid ${teamEmails[key] ? T.green : T.border}`, borderRadius: 10, padding: "12px 14px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.cream, boxSizing: "border-box", outline: "none" }} />
+        </div>
       ))}
+      <div style={{ fontSize: 11.5, color: T.dim, lineHeight: 1.5, marginBottom: 14 }}>
+        Tap <b>✕ Remove</b> to send that team's reports back to the primary address. Changes take effect once you save.
+      </div>
       <Btn label="Save Routing →" onClick={saveRouting} variant="primary" full />
     </>
   );
