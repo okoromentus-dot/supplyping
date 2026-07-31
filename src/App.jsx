@@ -5,6 +5,10 @@ import { supabase } from "./supabase.js";
 import emailjs from "@emailjs/browser";
 const EMAILJS_SERVICE = "service_np65zh6";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
+// Optional second template for the new-client welcome email. Leave blank until
+// it's created in EmailJS — the welcome send is skipped rather than failing.
+const EMAILJS_WELCOME_TEMPLATE = "";
+const GUIDE_URL = "https://supplyping.com/qr-placement-guide.pdf";
 const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
@@ -604,6 +608,31 @@ function saveProfileBackup(email, profile) {
 // page is used by workers who are NOT logged in, so the routing table can't come
 // from component state — it has to be looked up at submit time. Falls back to
 // empty (i.e. everything to the primary address) on any failure.
+// Sends the new-client welcome email with the placement guide. Silently skips
+// if no welcome template is configured, so onboarding never breaks on it.
+async function sendWelcomeEmail({ toEmail, businessName, facility }) {
+  if (!EMAILJS_WELCOME_TEMPLATE || !toEmail) {
+    console.log("[Welcome] Skipped — EMAILJS_WELCOME_TEMPLATE not set yet.");
+    return false;
+  }
+  try {
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_WELCOME_TEMPLATE, {
+      to_email: toEmail,
+      email: toEmail,
+      cleaning_email: toEmail,
+      business: businessName || "your facility",
+      facility: facility || "",
+      guide_link: GUIDE_URL,
+      dashboard_link: "https://supplyping.com",
+    });
+    console.log("[Welcome] Sent to", toEmail);
+    return true;
+  } catch (e) {
+    console.error("[Welcome] Failed:", e && (e.text || e.message));
+    return false;
+  }
+}
+
 async function fetchTeamRouting(primaryEmail, facilityName) {
   const esc = (s) => String(s || "").toLowerCase().trim().replace(/["\\]/g, "");
   const clean = esc(primaryEmail);
@@ -1127,10 +1156,10 @@ export default function App() {
           See it. Scan it.<br />Solve it. <span style={{ color: T.orange }}>⚠️</span>
         </h1>
         <p style={{ fontSize: 18, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
-          Real-time facility reporting for warehouses, plants, and campuses. Workers scan a QR code to flag a safety hazard, maintenance issue, cleaning need, or supply shortage — and the right team is notified instantly, with a timestamp.
+          Real-time facility reporting for warehouses, plants, and campuses. Workers scan a QR code and photograph the problem — AI identifies the hazard, sets a severity, and drafts the report. The right team is notified instantly, with a timestamp.
         </p>
         <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 36px", lineHeight: 1.6 }}>
-          Lead with safety. Cover everything else in the same scan. Set up in 10 minutes — no app, no IT team.
+          AI photo analysis · 6 languages · live dashboard. Set up in 10 minutes — no app, no login for workers, no IT team.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="primary" size="lg" />
@@ -1158,13 +1187,45 @@ export default function App() {
               { n: "01", emoji: "✍️", title: "Sign Up Free", desc: "Create your account and select your industry. No credit card needed." },
               { n: "02", emoji: "📍", title: "Add Locations", desc: "Enter your locations and how many units/assets each has." },
               { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post at each unit/asset." },
-              { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan → tap the issue → the right team is notified instantly." },
+              { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan, photograph the issue, and AI drafts the report. The right team is notified instantly." },
             ].map(s => (
               <Card key={s.n}>
                 <div style={{ fontSize: 11, color: T.orange, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>{s.n}</div>
                 <div style={{ fontSize: 28, marginBottom: 12 }}>{s.emoji}</div>
                 <div style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{s.title}</div>
                 <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>{s.desc}</div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* AI CAMERA + CAPABILITIES — written to be quotable by search engines
+          and AI summaries, which describe the product from this page. */}
+      <div style={{ padding: "64px 24px", background: T.cream }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 700 }}>AI Photo Reporting</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 14px", letterSpacing: -1.2 }}>Point the camera. AI writes the report.</h2>
+            <p style={{ fontSize: 15.5, color: T.muted, maxWidth: 660, margin: "0 auto 34px", lineHeight: 1.7 }}>
+              A worker scans the QR code and photographs the hazard. SupplyPing's AI identifies what it is,
+              tags it, assigns a severity, and drafts the description — then the worker confirms and sends.
+              Nothing is filed without a person approving it.
+            </p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16 }}>
+            {[
+              ["🤖", "AI hazard analysis", "Photograph a spill, blocked exit, or damaged equipment — AI classifies the hazard type and flags immediate risks."],
+              ["⚡", "Severity triage", "High-severity hazards are marked so a wet floor in a forklift lane outranks an empty towel dispenser."],
+              ["👥", "Routed by team", "Safety, security, maintenance, cleaning and supplies each go to the team that owns them."],
+              ["🌐", "Six languages + voice", "Workers report in Spanish, French, Arabic, Bengali, Hindi or Chinese. Supervisors read English."],
+              ["📊", "Live dashboard", "Every report appears in seconds, tracked from reported to resolved with timestamps."],
+              ["📷", "Photo evidence", "Each report keeps its photo and time on record — no more relying on memory at review time."],
+            ].map(([emoji, title, desc]) => (
+              <Card key={title}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>{emoji}</div>
+                <div style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{title}</div>
+                <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>{desc}</div>
               </Card>
             ))}
           </div>
@@ -1550,6 +1611,9 @@ export default function App() {
               // forcing the client through onboarding again.
               saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
               if (!savedOk) showToast("⚠️ Setup saved on this device, but syncing failed — contact support if it disappears.", T.yellow);
+              // Welcome package — placement guide + dashboard link. Fire and
+              // forget so a mail hiccup never blocks finishing setup.
+              sendWelcomeEmail({ toEmail: email, businessName: bizName, facility: location });
               setStep(4);
             }} disabled={!alertEmail} variant="primary" full />
           </>
@@ -1591,6 +1655,20 @@ export default function App() {
                 </div>
               ))}
             </div>
+            {/* Placement guide — the thing that decides whether a pilot works */}
+            <a href={GUIDE_URL} target="_blank" rel="noopener noreferrer"
+              style={{ display: "block", textDecoration: "none", background: T.orangeLight, border: `1.5px solid #FED7AA`, borderRadius: 14, padding: "16px 18px", marginBottom: 16, textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 26 }}>📄</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: T.ink }}>QR Code Placement Guide</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+                    Where to put your codes, how to print them, and a sticker layout. Two-minute read.
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: T.orange, whiteSpace: "nowrap" }}>Open →</div>
+              </div>
+            </a>
             <Btn label="Go to My Dashboard →" onClick={() => nav("dashboard")} variant="green" full />
           </>
         )}
@@ -1797,6 +1875,20 @@ export default function App() {
           <div style={{ fontSize: 12.5, color: T.green, fontWeight: 600, marginBottom: 12 }}>{routingSummary()}</div>
           {routingEditor}
         </Card>
+
+        <a href={GUIDE_URL} target="_blank" rel="noopener noreferrer"
+          style={{ display: "block", textDecoration: "none", background: T.orangeLight, border: `1.5px solid #FED7AA`, borderRadius: 14, padding: "16px 18px", marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 26 }}>📄</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: T.ink }}>QR Code Placement Guide</div>
+              <div style={{ fontSize: 12, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+                Where to put your codes, how to print them, and a sticker layout.
+              </div>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: T.orange, whiteSpace: "nowrap" }}>Open →</div>
+          </div>
+        </a>
 
         <Card style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 14 }}>+ Add New Location</div>
