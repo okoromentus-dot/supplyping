@@ -478,7 +478,7 @@ async function fetchReports(scope) {
       return {
         id: r.id,
         room: r.fields["Room"] || "Unknown Room",
-        stall: r.fields["Stall"] || "General",
+        stall: r.fields["Stall"] || "",
         location: r.fields["Location"] || "",
         cleaningEmail: r.fields["Cleaning Team Email"] || "",
         status,
@@ -870,7 +870,7 @@ export default function App() {
         cleaning_email: recipients, to_email: recipients, email: recipients,
         issue: `✅ RESOLVED: ${item.status || item.supply.label}`,
         location: item.location || "",
-        location_name: item.location || "", room: item.room, stall: item.stall,
+        location_name: item.location || "", room: item.room, stall: item.stall || "",
         business: bizName || email, time: new Date().toLocaleString(),
       });
     }
@@ -1114,7 +1114,7 @@ export default function App() {
       location: location || "Test Location",
       location_name: location || "Test Location",
       room: "Test Room",
-      stall: "Stall 1",
+      stall: "",
       business: bizName || "Your Business",
       time: new Date().toLocaleString(),
     };
@@ -1631,12 +1631,12 @@ export default function App() {
                   return (
                     <div key={`${ri}-${si}`} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, textAlign: "center", boxShadow: T.shadow }}>
                       <img src={qr(formUrl)} alt="" style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
-                      <div style={{ fontSize: 12, fontWeight: 700 }}>Unit/Asset {si + 1}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>{room.stalls > 1 ? `Unit ${si + 1}` : room.name}</div>
                       <div style={{ fontSize: 10, color: T.muted, marginTop: 2 }}>{room.name}</div>
                       <button onClick={() => {
                         const link = document.createElement("a");
                         link.href = qr(formUrl, 400);
-                        link.download = `QR-${room.name}-Stall${si+1}.png`;
+                        link.download = room.stalls > 1 ? `QR-${room.name}-Unit${si+1}.png` : `QR-${room.name}.png`;
                         link.click();
                         showToast("📥 QR code downloaded!", T.green);
                       }} style={{ marginTop: 8, background: T.ink, color: T.white, border: "none", borderRadius: 7, padding: "5px 10px", fontFamily: font.body, fontSize: 10, fontWeight: 600, cursor: "pointer", width: "100%" }}>
@@ -1788,7 +1788,7 @@ export default function App() {
                     {translatedAlerts[a.id] && translatedAlerts[a.id] !== (a.status || a.supply.label) && (
                       <div style={{ fontSize: 10.5, color: T.dim, marginTop: 2, fontStyle: "italic" }}>{a.status || a.supply.label}</div>
                     )}
-                    <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>{a.room} · {a.stall}{a.location ? ` · ${a.location}` : ""} · {a.time}</div>
+                    <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>{[a.room, a.stall, a.location].filter(Boolean).join(" · ")} · {a.time}</div>
                     {a.cleaningEmail && <div style={{ fontSize: 11, color: T.green, marginTop: 2 }}>✅ {dt("Alert sent to")} {a.cleaningEmail}</div>}
                   </div>
                 </div>
@@ -1947,7 +1947,7 @@ export default function App() {
                     <button onClick={() => {
                       const link = document.createElement("a");
                       link.href = qr(formUrl, 400);
-                      link.download = `QR-${room.name}-Stall${si+1}.png`;
+                      link.download = room.stalls > 1 ? `QR-${room.name}-Unit${si+1}.png` : `QR-${room.name}.png`;
                       link.click();
                       showToast("📥 Downloaded!", T.green);
                     }} style={{ marginTop: 8, background: T.ink, color: T.white, border: "none", borderRadius: 7, padding: "5px 10px", fontFamily: font.body, fontSize: 10, fontWeight: 600, cursor: "pointer", width: "100%" }}>
@@ -2272,6 +2272,10 @@ export default function App() {
               const locName = qrLocation || p.get("l") || location || qrBusiness || p.get("b") || "Unlisted Location";
               const roomName = qrRoom || p.get("r") || "Unknown Room";
               const stallNum = qrStall || p.get("s") || "1";
+              // "Stall" was restroom-era vocabulary. Label the unit only when a
+              // location genuinely has more than one; otherwise omit it so a
+              // dock or corridor alert doesn't read "Stall 1".
+              const unitLabel = String(stallNum) === "1" ? "" : `Unit ${stallNum}`;
 
               // Diagnostic: shows every source the location is drawn from, in
               // priority order, so an "Unlisted Location" result immediately
@@ -2291,7 +2295,7 @@ export default function App() {
               const reportFields = {
                 "Location": locName,
                 "Room": roomName,
-                "Stall": `Stall ${stallNum}`,
+                "Stall": unitLabel,
                 "Status": issueString,
                 "Cleaning Team Email": cleaningEmail,
                 "Reported At": new Date().toISOString(),
@@ -2375,7 +2379,7 @@ export default function App() {
                 ].filter(Boolean).join(" — "),
                 location: locName,
                 room: roomName,
-                stall: `Stall ${stallNum}`,
+                stall: unitLabel,
                 business: biz,
                 time: new Date().toLocaleString(),
               });
