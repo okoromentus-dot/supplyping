@@ -608,23 +608,27 @@ async function fetchTeamRouting(primaryEmail) {
   const clean = String(primaryEmail || "").toLowerCase().trim().replace(/["\\]/g, "");
   if (!clean) return null;
   try {
-    const formula = `LOWER(TRIM({Cleaning Team Email}))="${clean}"`;
+    // Match on either field: the QR carries the alert address, but a client's
+    // row may key that value under Email instead of Cleaning Team Email.
+    const formula = `OR(LOWER(TRIM({Cleaning Team Email}))="${clean}",LOWER(TRIM({Email}))="${clean}")`;
     const res = await fetch(
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(formula)}&maxRecords=1`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
     const data = await res.json();
     if (!res.ok || !data.records || data.records.length === 0) {
-      console.warn("[Routing] No client row matched primary email:", clean);
+      console.warn(`[Routing] No Clients row where Cleaning Team Email or Email = "${clean}". Team routing skipped — everything goes to the primary address.`);
       return null;
     }
     const f = data.records[0].fields;
-    return {
+    const found = {
       safety: f["Safety Team Email"] || "",
       security: f["Security Team Email"] || "",
       maint: f["Maintenance Team Email"] || "",
       supply: f["Supplies Team Email"] || "",
     };
+    console.log(`[Routing] Matched Clients row (Email="${f["Email"] || ""}") — team addresses on file:`, JSON.stringify(found));
+    return found;
   } catch (e) {
     console.error("[Routing] Lookup failed:", e);
     return null;
@@ -2252,6 +2256,7 @@ export default function App() {
                 recipients: [...routed, MANAGEMENT_EMAIL].filter(Boolean),
                 teams: notifiedTeams,
                 source: hasStateRouting ? "account settings" : "lookup",
+                noTeamRouting: !Object.values(activeTeams || {}).some(v => v && String(v).trim()),
               });
               const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
@@ -2297,6 +2302,11 @@ export default function App() {
                 ))}
                 {notifiedInfo.teams.length > 0 && (
                   <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Team: {notifiedInfo.teams.join(" + ")}</div>
+                )}
+                {notifiedInfo.noTeamRouting && (
+                  <div style={{ fontSize: 10.5, color: T.yellow, marginTop: 6, lineHeight: 1.45 }}>
+                    ⚠️ No team address on file for this issue type — sent to the primary address.
+                  </div>
                 )}
               </div>
             )}
