@@ -7,7 +7,7 @@ const EMAILJS_SERVICE = "service_np65zh6";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
 // Optional second template for the new-client welcome email. Leave blank until
 // it's created in EmailJS — the welcome send is skipped rather than failing.
-const EMAILJS_WELCOME_TEMPLATE = "";
+const EMAILJS_WELCOME_TEMPLATE = "template_xgh05zq";
 const GUIDE_URL = "https://supplyping.com/qr-placement-guide.pdf";
 const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
