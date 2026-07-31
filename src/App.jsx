@@ -574,11 +574,13 @@ async function writeClientFields(email, fields, label) {
     : `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients`;
   const payload = recordId ? fields : { "Email": email, ...fields };
   const r = await airtableWrite(url, recordId ? "PATCH" : "POST", payload, `Client profile (${label})`);
-  return r.ok;
+  // Return the full result so callers can tell the user which columns are
+  // missing, instead of reporting a success that didn't fully happen.
+  return r;
 }
 
 async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
-  if (!email) return false;
+  if (!email) return { ok: false, dropped: [] };
   const fields = { "Locations": JSON.stringify(roomsArray || []), ...extra };
   try {
     // airtableWrite self-heals unknown field names, so a single attempt now
@@ -586,7 +588,7 @@ async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
     return await writeClientFields(email, fields, "full profile");
   } catch (e) {
     console.error("[Airtable] Client profile network error:", e);
-    return false;
+    return { ok: false, dropped: [] };
   }
 }
 
@@ -595,6 +597,20 @@ async function saveLocationsToAirtable(email, roomsArray, extra = {}) {
 function saveProfileBackup(email, profile) {
   try { localStorage.setItem(`sp_profile_${String(email).toLowerCase()}`, JSON.stringify(profile)); } catch (e) {}
 }
+// Airtable is the source of truth where it has a value; the local backup fills
+// any key it left blank. Needed because Airtable returns an object of empty
+// strings when the team columns don't exist yet.
+function mergeTeamEmails(fromAirtable, fromBackup) {
+  const keys = ["safety", "security", "maint", "supply"];
+  const out = {};
+  keys.forEach(k => {
+    const a = fromAirtable && fromAirtable[k];
+    const b = fromBackup && fromBackup[k];
+    out[k] = (a && String(a).trim()) || (b && String(b).trim()) || "";
+  });
+  return out;
+}
+
 function loadProfileBackup(email) {
   try {
     const raw = localStorage.getItem(`sp_profile_${String(email).toLowerCase()}`);
@@ -832,7 +848,11 @@ export default function App() {
       const ce = profile?.cleaningEmail || backup?.alertEmail;
       const ph = profile?.phone || backup?.alertPhone;
       const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
-      const te = profile?.teamEmails || backup?.teamEmails;
+      // Merge per-key: Airtable wins where it has a value, the local backup
+      // fills the gaps. Previously `profile?.teamEmails || backup?.teamEmails`
+      // always chose the profile object — which exists even when every value is
+      // blank — so the backup was never used and saved emails looked lost.
+      const te = mergeTeamEmails(profile?.teamEmails, backup?.teamEmails);
       if (te) setTeamEmails(prev => ({ ...prev, ...te }));
       if (biz) setBizName(biz);
       if (fac) setLocation(fac);
@@ -876,9 +896,20 @@ export default function App() {
       "Maintenance Team Email": teamEmails.maint || "",
       "Supplies Team Email": teamEmails.supply || "",
     };
-    const ok = await saveLocationsToAirtable(email, rooms, extra);
+    const res = await saveLocationsToAirtable(email, rooms, extra);
+    // Always keep a local copy so the setting survives on this device even if
+    // the Airtable columns aren't there yet.
     saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
-    showToast(ok ? "✅ Routing saved" : "⚠️ Saved on this device — sync failed", ok ? T.green : T.yellow);
+    const dropped = (res && res.dropped) || [];
+    const teamDropped = dropped.filter(d => /Team Email$/.test(d));
+    if (!res || !res.ok) {
+      showToast("⚠️ Saved on this device only — couldn't reach Airtable.", T.yellow);
+    } else if (teamDropped.length) {
+      showToast(`⚠️ Saved on this device, but these columns are missing in Airtable: ${teamDropped.join(", ")}. Add them as Single line text to sync across devices.`, T.yellow);
+      console.warn("[Routing] Missing Airtable columns:", teamDropped);
+    } else {
+      showToast("✅ Routing saved", T.green);
+    }
   };
 
   const TEAM_FIELDS = [
@@ -1294,7 +1325,7 @@ export default function App() {
             const ce = profile?.cleaningEmail || backup?.alertEmail;
             const ph = profile?.phone || backup?.alertPhone;
             const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
-            const te = profile?.teamEmails || backup?.teamEmails;
+            const te = mergeTeamEmails(profile?.teamEmails, backup?.teamEmails);
             if (te) setTeamEmails(prev => ({ ...prev, ...te }));
             if (biz) setBizName(biz);
             if (fac) setLocation(fac);
@@ -1468,7 +1499,8 @@ export default function App() {
               if (teamEmails.security) fields["Security Team Email"] = teamEmails.security;
               if (teamEmails.maint) fields["Maintenance Team Email"] = teamEmails.maint;
               if (teamEmails.supply) fields["Supplies Team Email"] = teamEmails.supply;
-              const savedOk = await saveLocationsToAirtable(email, rooms, fields);
+              const saveRes = await saveLocationsToAirtable(email, rooms, fields);
+              const savedOk = saveRes && saveRes.ok;
               // Local backup: if Airtable is unavailable or rejects the write,
               // the setup still survives a logout on this device rather than
               // forcing the client through onboarding again.
