@@ -769,6 +769,7 @@ export default function App() {
   const [aiSeverity, setAiSeverity] = useState("");
   const [aiDescription, setAiDescription] = useState("");
   const [aiTags, setAiTags] = useState([]);
+  const [notifiedInfo, setNotifiedInfo] = useState(null); // { recipients, teams, source }
   const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
@@ -2245,6 +2246,13 @@ export default function App() {
                 "| teams:", JSON.stringify(activeTeams),
                 "| source:", hasStateRouting ? "session" : "airtable lookup",
                 "| RECIPIENTS:", recipients);
+              // Shown on the confirmation screen so routing can be verified from
+              // a phone, without opening a developer console.
+              setNotifiedInfo({
+                recipients: [...routed, MANAGEMENT_EMAIL].filter(Boolean),
+                teams: notifiedTeams,
+                source: hasStateRouting ? "account settings" : "lookup",
+              });
               const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
                 to_email: recipients,
@@ -2281,9 +2289,20 @@ export default function App() {
           <div style={{ textAlign: "center", padding: "48px 0" }}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
             <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>{tr(reportLang, "Report Sent!")}</h2>
+            {notifiedInfo && notifiedInfo.recipients.length > 0 && (
+              <div style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", margin: "0 auto 16px", maxWidth: 420, textAlign: "left" }}>
+                <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>Notified</div>
+                {notifiedInfo.recipients.map(r => (
+                  <div key={r} style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.6 }}>✉️ {r}</div>
+                ))}
+                {notifiedInfo.teams.length > 0 && (
+                  <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Team: {notifiedInfo.teams.join(" + ")}</div>
+                )}
+              </div>
+            )}
             <p style={{ color: T.muted, fontSize: 15 }}>{tr(reportLang, "The team has been notified and is on the way.")}</p>
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Btn label={tr(reportLang, "Report Another Issue")} onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setAiTags([]); setAiImmediateRisk(false); setReportDone(false); }} variant="outline" />
+              <Btn label={tr(reportLang, "Report Another Issue")} onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setAiTags([]); setAiImmediateRisk(false); setNotifiedInfo(null); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
             </div>
           </div>
