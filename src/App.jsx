@@ -604,20 +604,28 @@ function saveProfileBackup(email, profile) {
 // page is used by workers who are NOT logged in, so the routing table can't come
 // from component state — it has to be looked up at submit time. Falls back to
 // empty (i.e. everything to the primary address) on any failure.
-async function fetchTeamRouting(primaryEmail) {
-  const clean = String(primaryEmail || "").toLowerCase().trim().replace(/["\\]/g, "");
-  if (!clean) return null;
+async function fetchTeamRouting(primaryEmail, facilityName) {
+  const esc = (s) => String(s || "").toLowerCase().trim().replace(/["\\]/g, "");
+  const clean = esc(primaryEmail);
+  const fac = esc(facilityName);
+  if (!clean && !fac) return null;
   try {
     // Match on either field: the QR carries the alert address, but a client's
     // row may key that value under Email instead of Cleaning Team Email.
-    const formula = `OR(LOWER(TRIM({Cleaning Team Email}))="${clean}",LOWER(TRIM({Email}))="${clean}")`;
+    // Three keys, any of which identifies the client: the alert address on the
+    // QR, their login email, or the facility name. Matching on facility means
+    // routing keeps working even when a printed code carries a stale address.
+    const parts = [];
+    if (clean) parts.push(`LOWER(TRIM({Cleaning Team Email}))="${clean}"`, `LOWER(TRIM({Email}))="${clean}"`);
+    if (fac) parts.push(`LOWER(TRIM({Facility Name}))="${fac}"`);
+    const formula = parts.length === 1 ? parts[0] : `OR(${parts.join(",")})`;
     const res = await fetch(
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(formula)}&maxRecords=1`,
       { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
     );
     const data = await res.json();
     if (!res.ok || !data.records || data.records.length === 0) {
-      console.warn(`[Routing] No Clients row where Cleaning Team Email or Email = "${clean}". Team routing skipped — everything goes to the primary address.`);
+      console.warn(`[Routing] No Clients row matched email "${clean}" or facility "${fac}". Team routing skipped — everything goes to the primary address.`);
       return null;
     }
     const f = data.records[0].fields;
@@ -2240,7 +2248,7 @@ export default function App() {
               let activeTeams = teamEmails;
               const hasStateRouting = Object.values(teamEmails || {}).some(v => v && String(v).trim());
               if (!hasStateRouting) {
-                const looked = await fetchTeamRouting(cleaningEmail);
+                const looked = await fetchTeamRouting(cleaningEmail, locName);
                 if (looked) activeTeams = looked;
               }
               const routed = routeRecipients(reportIssues, { ...activeTeams, clean: cleaningEmail }, cleaningEmail);
@@ -2257,6 +2265,7 @@ export default function App() {
                 teams: notifiedTeams,
                 source: hasStateRouting ? "account settings" : "lookup",
                 noTeamRouting: !Object.values(activeTeams || {}).some(v => v && String(v).trim()),
+                lookedFor: cleaningEmail,
               });
               const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
@@ -2305,7 +2314,7 @@ export default function App() {
                 )}
                 {notifiedInfo.noTeamRouting && (
                   <div style={{ fontSize: 10.5, color: T.yellow, marginTop: 6, lineHeight: 1.45 }}>
-                    ⚠️ No team address on file for this issue type — sent to the primary address.
+                    ⚠️ No team routing found for "{notifiedInfo.lookedFor}" — sent to the primary address. Set your Primary Alert Email to this value under Manage → Alert Routing.
                   </div>
                 )}
               </div>
