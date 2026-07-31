@@ -600,6 +600,37 @@ function saveProfileBackup(email, profile) {
 // Airtable is the source of truth where it has a value; the local backup fills
 // any key it left blank. Needed because Airtable returns an object of empty
 // strings when the team columns don't exist yet.
+// Fetches a client's team routing by their primary alert email. The QR report
+// page is used by workers who are NOT logged in, so the routing table can't come
+// from component state — it has to be looked up at submit time. Falls back to
+// empty (i.e. everything to the primary address) on any failure.
+async function fetchTeamRouting(primaryEmail) {
+  const clean = String(primaryEmail || "").toLowerCase().trim().replace(/["\\]/g, "");
+  if (!clean) return null;
+  try {
+    const formula = `LOWER(TRIM({Cleaning Team Email}))="${clean}"`;
+    const res = await fetch(
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?filterByFormula=${encodeURIComponent(formula)}&maxRecords=1`,
+      { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (!res.ok || !data.records || data.records.length === 0) {
+      console.warn("[Routing] No client row matched primary email:", clean);
+      return null;
+    }
+    const f = data.records[0].fields;
+    return {
+      safety: f["Safety Team Email"] || "",
+      security: f["Security Team Email"] || "",
+      maint: f["Maintenance Team Email"] || "",
+      supply: f["Supplies Team Email"] || "",
+    };
+  } catch (e) {
+    console.error("[Routing] Lookup failed:", e);
+    return null;
+  }
+}
+
 function mergeTeamEmails(fromAirtable, fromBackup) {
   const keys = ["safety", "security", "maint", "supply"];
   const out = {};
@@ -2198,9 +2229,22 @@ export default function App() {
               // management is always CC'd via the combined recipient list.
               // Route to the team that owns each reported category. Falls back
               // to the QR/primary address for any team without its own inbox.
-              const routed = routeRecipients(reportIssues, { ...teamEmails, clean: cleaningEmail }, cleaningEmail);
+              // Team routing: prefer whatever is already in state (manager
+              // reporting while logged in), otherwise look it up — a worker
+              // scanning a QR code has no session and no state to draw on.
+              let activeTeams = teamEmails;
+              const hasStateRouting = Object.values(teamEmails || {}).some(v => v && String(v).trim());
+              if (!hasStateRouting) {
+                const looked = await fetchTeamRouting(cleaningEmail);
+                if (looked) activeTeams = looked;
+              }
+              const routed = routeRecipients(reportIssues, { ...activeTeams, clean: cleaningEmail }, cleaningEmail);
               const notifiedTeams = teamsForItems(reportIssues);
               const recipients = [...routed, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
+              console.log("[Routing] issues:", reportIssues,
+                "| teams:", JSON.stringify(activeTeams),
+                "| source:", hasStateRouting ? "session" : "airtable lookup",
+                "| RECIPIENTS:", recipients);
               const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
                 to_email: recipients,
