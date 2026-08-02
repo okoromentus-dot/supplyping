@@ -234,11 +234,11 @@ const SUPPLY_CATEGORIES = [
     ]
   },
   {
-    id: "supply", label: "🧻 Supplies", color: T.blue, bg: T.blueLight, border: T.blueBorder,
+    id: "supply", label: "📦 Supplies", color: T.blue, bg: T.blueLight, border: T.blueBorder,
     items: [
       { id: "soap", emoji: "🧼", label: "No Soap" },
-      { id: "towels", emoji: "🖐️", label: "No Paper Towels" },
-      { id: "tp", emoji: "🧻", label: "No Toilet Paper" },
+      { id: "towels", emoji: "🧻", label: "No Paper Towels" },
+      { id: "tp", emoji: "🚽", label: "No Toilet Paper" },
       { id: "sanitizer", emoji: "🧴", label: "No Hand Sanitizer" },
       { id: "breakroom", emoji: "☕", label: "Breakroom Restock" },
     ]
@@ -360,7 +360,7 @@ const AREA_TYPES = [
   { id: "default", label: "All Categories (default)" },
   { id: "safety", label: "⚠️ Safety Zone" },
   { id: "warehouse", label: "🏭 Warehouse Floor" },
-  { id: "supply", label: "🧻 Restroom / Supplies" },
+  { id: "supply", label: "📦 Restroom / Supplies" },
 ];
 
 // ── TEAM ROUTING ─────────────────────────────────────────────────
@@ -811,6 +811,8 @@ export default function App() {
   const [aiDescription, setAiDescription] = useState("");
   const [aiTags, setAiTags] = useState([]);
   const [notifiedInfo, setNotifiedInfo] = useState(null); // { recipients, teams, source }
+  const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
+  const [queuedCount, setQueuedCount] = useState(0);
   const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
@@ -955,6 +957,29 @@ export default function App() {
     return () => { cancelled = true; };
   }, [alerts, dashLang]);
 
+  // Connectivity awareness. A worker in a dead zone needs to know their report
+  // was captured, not silently dropped — and needs to know the difference
+  // between "sent" and "will send later".
+  useEffect(() => {
+    const readQueue = () => {
+      try {
+        const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+        setQueuedCount(Array.isArray(q) ? q.length : 0);
+      } catch (e) { setQueuedCount(0); }
+    };
+    const goOnline = () => { setIsOffline(false); setTimeout(readQueue, 1500); };
+    const goOffline = () => setIsOffline(true);
+    readQueue();
+    const t = setInterval(readQueue, 5000);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
   // Alert routing editor — one definition used on both the Dashboard and the
   // Manage screen so the two can never drift apart.
   const saveRouting = async () => {
@@ -989,7 +1014,7 @@ export default function App() {
     ["safety", "⚠️ Safety & Hazards", "safety@yourbusiness.com"],
     ["security", "🔒 Security & Facilities", "security@yourbusiness.com"],
     ["maint", "🔧 Maintenance & Repairs", "maintenance@yourbusiness.com"],
-    ["supply", "🧻 Supplies", "supplies@yourbusiness.com"],
+    ["supply", "📦 Supplies", "supplies@yourbusiness.com"],
   ];
 
   // Plain-language summary of where alerts currently go.
@@ -1110,7 +1135,7 @@ export default function App() {
       cleaning_email: recipients,
       to_email: recipients,
       email: recipients,
-      issue: "🧻 No Toilet Paper (TEST ALERT)",
+      issue: "📦 Supplies Running Low (TEST ALERT)",
       location: location || "Test Location",
       location_name: location || "Test Location",
       room: "Test Room",
@@ -1567,7 +1592,7 @@ export default function App() {
                     ["safety", "⚠️ Safety & Hazards", "safety@yourbusiness.com"],
                     ["security", "🔒 Security & Facilities", "security@yourbusiness.com"],
                     ["maint", "🔧 Maintenance & Repairs", "maintenance@yourbusiness.com"],
-                    ["supply", "🧻 Supplies", "supplies@yourbusiness.com"],
+                    ["supply", "📦 Supplies", "supplies@yourbusiness.com"],
                   ].map(([key, label, ph]) => (
                     <Input key={key} label={label} value={teamEmails[key]}
                       onChange={(v) => setTeamEmails(prev => ({ ...prev, [key]: v }))}
@@ -1812,6 +1837,17 @@ export default function App() {
           </>
         )}
 
+        {queuedCount > 0 && (
+          <Card style={{ marginTop: 28, borderColor: "#FDE68A", background: T.yellowLight }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.yellow }}>
+              📡 {queuedCount} report{queuedCount > 1 ? "s" : ""} waiting to send
+            </div>
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 5, lineHeight: 1.5 }}>
+              Captured on this device while offline. They'll send automatically once the connection returns.
+            </div>
+          </Card>
+        )}
+
         {/* FOUNDING PILOT FEEDBACK */}
         <Card style={{ marginTop: 28 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>💬 {dt("Founding Pilot Feedback")}</div>
@@ -1983,6 +2019,11 @@ export default function App() {
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ width: 56, height: 56, background: T.ink, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 16px" }}>📋</div>
               <div style={{ fontFamily: font.display, fontSize: 11, color: T.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>SupplyPing · Facility Operations</div>
+              {isOffline && (
+                <div style={{ background: T.yellowLight, border: "1.5px solid #FDE68A", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 12.5, color: T.yellow, fontWeight: 600, lineHeight: 1.45 }}>
+                  📡 No signal — you can still report. It will send automatically when you're back in range.
+                </div>
+              )}
               <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>{tr(reportLang, "Report a Facility Issue")}</h2>
               <p style={{ color: T.muted, fontSize: 13, margin: "0 0 8px" }}>{tr(reportLang, "Select the issue(s). Takes 10 seconds.")}</p>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>

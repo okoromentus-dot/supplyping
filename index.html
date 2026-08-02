@@ -6,6 +6,19 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1A1814" />
+    <script>
+      // Register the offline service worker. Wrapped so an unsupported browser
+      // or a failed registration can never block the app from loading.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/sw.js")
+            .then(function (r) { console.log("[SW] Offline support ready"); })
+            .catch(function (e) { console.log("[SW] Not registered:", e && e.message); });
+        });
+      }
+    </script>
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
     <title>SupplyPing — AI Photo Hazard Reporting for Facilities</title>
     <meta name="description" content="Workers scan a QR code and photograph a hazard. SupplyPing's AI identifies the issue, assigns a severity, and drafts the report — then alerts the right team instantly with a timestamp. Six languages, live dashboard, no app required." />
