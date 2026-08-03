@@ -1,1 +1,1 @@
-{ "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }] }
+{ "rewrites": [{ "source": "/((?!api/|demo-).*)", "destination": "/index.html" }] }
