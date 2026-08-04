@@ -467,172 +467,6 @@ function categoryForItem(itemId) {
   for (const cat of [...SUPPLY_CATEGORIES, ...WAREHOUSE_CATEGORIES]) {
     if (cat.items.some(i => i.id === itemId)) return cat.id;
   }
-  // ── PERFORMANCE REPORT (client-facing, printable) ──
-  if (screen === "performance") {
-    const rep = buildPerformanceReport(alerts, reportDays);
-    const rangeLabel = reportDays === 0 ? "All time" : `Last ${reportDays} days`;
-    const stat = (label, value, color, sub) => (
-      <div style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 20px", flex: "1 1 150px", minWidth: 140 }}>
-        <div style={{ fontFamily: font.display, fontSize: 30, fontWeight: 800, color: color || T.ink }}>{value}</div>
-        <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.1, fontWeight: 700, marginTop: 4 }}>{label}</div>
-        {sub && <div style={{ fontSize: 10.5, color: T.dim, marginTop: 3 }}>{sub}</div>}
-      </div>
-    );
-
-    return (
-      <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
-        <style>{`
-          * { box-sizing: border-box; }
-          @media print {
-            .no-print { display: none !important; }
-            body { background: #fff !important; }
-            .print-card { break-inside: avoid; }
-          }
-        `}</style>
-        {toast && <Toast msg={toast.msg} color={toast.color} />}
-
-        <header className="no-print" style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
-            <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📊</div>
-            <div>
-              <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Performance Report</div>
-              <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>Share with your client</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <select value={reportDays} onChange={(e) => setReportDays(Number(e.target.value))}
-              style={{ fontFamily: font.body, fontSize: 12.5, fontWeight: 600, color: T.ink, background: T.white, border: `1.5px solid ${T.border}`, borderRadius: 100, padding: "8px 12px", cursor: "pointer", outline: "none" }}>
-              <option value={7}>Last 7 days</option>
-              <option value={30}>Last 30 days</option>
-              <option value={90}>Last 90 days</option>
-              <option value={0}>All time</option>
-            </select>
-            <Btn label="🖨️ Print / PDF" onClick={() => window.print()} variant="outline" size="sm" />
-            <Btn label="⬇️ CSV" onClick={() => {
-              try {
-                const csv = reportToCSV(rep, location || bizName);
-                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `SupplyPing-Report-${new Date().toISOString().slice(0,10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch (e) { showToast("Couldn't export — try Print instead.", T.red); }
-            }} variant="outline" size="sm" />
-            <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
-          </div>
-        </header>
-
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 60px" }}>
-          {/* Report header — this is what a client sees */}
-          <div className="print-card" style={{ marginBottom: 26 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              <div style={{ width: 34, height: 34, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>📋</div>
-              <div style={{ fontFamily: font.display, fontSize: 19, fontWeight: 800 }}>SupplyPing</div>
-            </div>
-            <h1 style={{ fontFamily: font.display, fontSize: 32, fontWeight: 800, margin: "0 0 8px", letterSpacing: -1.2 }}>
-              {location || bizName || "Facility"} — Service Report
-            </h1>
-            <div style={{ fontSize: 13.5, color: T.muted }}>
-              {rangeLabel} · Generated {new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
-            </div>
-          </div>
-
-          {/* Headline numbers */}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }} className="print-card">
-            {stat("Issues reported", rep.total, T.ink)}
-            {stat("Resolved", rep.resolvedCount, T.green)}
-            {stat("Still open", rep.openCount, rep.openCount > 0 ? T.yellow : T.green)}
-            {stat("Resolution rate", rep.resolutionRate === null ? "—" : `${rep.resolutionRate}%`, T.green)}
-          </div>
-
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 26 }} className="print-card">
-            {stat("Average response", formatDuration(rep.avg), T.blue, rep.measured ? `across ${rep.measured} timed` : "no timed data yet")}
-            {stat("Median response", formatDuration(rep.median), T.blue)}
-            {stat("Fastest", formatDuration(rep.fastest), T.green)}
-          </div>
-
-          {rep.measured === 0 && rep.resolvedCount > 0 && (
-            <div style={{ background: T.yellowLight, border: "1.5px solid #FDE68A", borderRadius: 12, padding: "12px 16px", marginBottom: 26, fontSize: 12.5, color: T.yellow, lineHeight: 1.5 }}>
-              Response times will appear here once issues are resolved going forward. Reports resolved before timing was enabled aren't included, so nothing here is estimated.
-            </div>
-          )}
-
-          {/* Breakdown by location */}
-          {rep.byLocation.length > 0 && (
-            <div className="print-card" style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 14 }}>Where issues came from</div>
-              {rep.byLocation.map(([loc, count]) => (
-                <div key={loc} style={{ marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600 }}>{loc}</span>
-                    <span style={{ color: T.muted, fontWeight: 700 }}>{count}</span>
-                  </div>
-                  <div style={{ height: 7, background: T.cream, borderRadius: 100, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.round((count / rep.total) * 100)}%`, background: T.orange, borderRadius: 100 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Breakdown by type */}
-          {rep.byCategory.length > 0 && (
-            <div className="print-card" style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 14 }}>What was reported</div>
-              {rep.byCategory.map(([cat, count]) => (
-                <div key={cat} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${T.border}`, fontSize: 13 }}>
-                  <span>{cat}</span>
-                  <span style={{ fontWeight: 800, color: T.ink }}>{count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* The receipts */}
-          {rep.rows.length > 0 && (
-            <div className="print-card" style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 22px" }}>
-              <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 6 }}>Full record</div>
-              <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 14 }}>Every issue, when it was reported, and when it was closed.</div>
-              {rep.rows.map(a => {
-                const mins = minutesBetween(a.reportedAtRaw, a.resolvedAtRaw);
-                return (
-                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.ink }}>{a.status || (a.supply && a.supply.label)}</div>
-                      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>
-                        {[a.room, a.location].filter(Boolean).join(" · ")}
-                        {a.reportedAtRaw ? ` · ${new Date(a.reportedAtRaw).toLocaleString()}` : ""}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 11.5, fontWeight: 800, color: a.resolved ? T.green : T.yellow }}>
-                        {a.resolved ? "Resolved" : "Open"}
-                      </div>
-                      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>{formatDuration(mins)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {rep.total === 0 && (
-            <div style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "40px 22px", textAlign: "center", color: T.muted }}>
-              No issues reported in this period. Try a wider date range.
-            </div>
-          )}
-
-          <div style={{ textAlign: "center", fontSize: 10.5, color: T.dim, marginTop: 26, lineHeight: 1.6 }}>
-            Generated by SupplyPing · supplyping.com<br />
-            Every issue timestamped when reported and when marked resolved.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return null;
 }
 
@@ -2955,6 +2789,158 @@ export default function App() {
               <p>You can update account details in Account Settings, opt out of SMS by replying STOP, or request deletion of your data at hello@supplyping.com.</p>
             </>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── PERFORMANCE REPORT (client-facing, printable) ──
+  if (screen === "performance") {
+    const rep = buildPerformanceReport(alerts, reportDays);
+    const rangeLabel = reportDays === 0 ? "All time" : `Last ${reportDays} days`;
+    const stat = (label, value, color, sub) => (
+      <div style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 20px", flex: "1 1 150px", minWidth: 140 }}>
+        <div style={{ fontFamily: font.display, fontSize: 30, fontWeight: 800, color: color || T.ink }}>{value}</div>
+        <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.1, fontWeight: 700, marginTop: 4 }}>{label}</div>
+        {sub ? <div style={{ fontSize: 10.5, color: T.dim, marginTop: 3 }}>{sub}</div> : null}
+      </div>
+    );
+
+    return (
+      <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
+        <style>{`* { box-sizing: border-box; } @media print { .no-print { display: none !important; } .print-card { break-inside: avoid; } }`}</style>
+        {toast && <Toast msg={toast.msg} color={toast.color} />}
+
+        <header className="no-print" style={{ background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 68, boxShadow: T.shadow, flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
+            <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📊</div>
+            <div>
+              <div style={{ fontFamily: font.display, fontSize: 15, fontWeight: 700 }}>Performance Report</div>
+              <div style={{ fontSize: 9, color: T.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>Share with your client</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select value={reportDays} onChange={(e) => setReportDays(Number(e.target.value))}
+              style={{ fontFamily: font.body, fontSize: 12.5, fontWeight: 600, color: T.ink, background: T.white, border: `1.5px solid ${T.border}`, borderRadius: 100, padding: "8px 12px", cursor: "pointer", outline: "none" }}>
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+              <option value={0}>All time</option>
+            </select>
+            <Btn label="🖨️ Print / PDF" onClick={() => window.print()} variant="outline" size="sm" />
+            <Btn label="⬇️ CSV" onClick={() => {
+              try {
+                const csv = reportToCSV(rep, location || bizName);
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `SupplyPing-Report-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (e) { showToast("Couldn't export — try Print instead.", T.red); }
+            }} variant="outline" size="sm" />
+            <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
+          </div>
+        </header>
+
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 60px" }}>
+          <div className="print-card" style={{ marginBottom: 26 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={{ width: 34, height: 34, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>📋</div>
+              <div style={{ fontFamily: font.display, fontSize: 19, fontWeight: 800 }}>SupplyPing</div>
+            </div>
+            <h1 style={{ fontFamily: font.display, fontSize: 32, fontWeight: 800, margin: "0 0 8px", letterSpacing: -1.2 }}>
+              {location || bizName || "Facility"} — Service Report
+            </h1>
+            <div style={{ fontSize: 13.5, color: T.muted }}>
+              {rangeLabel} · Generated {new Date().toLocaleDateString()}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }} className="print-card">
+            {stat("Issues reported", rep.total, T.ink)}
+            {stat("Resolved", rep.resolvedCount, T.green)}
+            {stat("Still open", rep.openCount, rep.openCount > 0 ? T.yellow : T.green)}
+            {stat("Resolution rate", rep.resolutionRate === null ? "—" : `${rep.resolutionRate}%`, T.green)}
+          </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 26 }} className="print-card">
+            {stat("Average response", formatDuration(rep.avg), T.blue, rep.measured ? `across ${rep.measured} timed` : "no timed data yet")}
+            {stat("Median response", formatDuration(rep.median), T.blue)}
+            {stat("Fastest", formatDuration(rep.fastest), T.green)}
+          </div>
+
+          {rep.measured === 0 && rep.resolvedCount > 0 ? (
+            <div style={{ background: T.yellowLight, border: "1.5px solid #FDE68A", borderRadius: 12, padding: "12px 16px", marginBottom: 26, fontSize: 12.5, color: T.yellow, lineHeight: 1.5 }}>
+              Response times appear here once issues are resolved going forward. Issues resolved before timing was enabled are excluded, so nothing here is estimated.
+            </div>
+          ) : null}
+
+          {rep.byLocation.length > 0 ? (
+            <div className="print-card" style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 14 }}>Where issues came from</div>
+              {rep.byLocation.map(([loc, count]) => (
+                <div key={loc} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{loc}</span>
+                    <span style={{ color: T.muted, fontWeight: 700 }}>{count}</span>
+                  </div>
+                  <div style={{ height: 7, background: T.cream, borderRadius: 100, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${rep.total ? Math.round((count / rep.total) * 100) : 0}%`, background: T.orange, borderRadius: 100 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {rep.byCategory.length > 0 ? (
+            <div className="print-card" style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 14 }}>What was reported</div>
+              {rep.byCategory.map(([cat, count]) => (
+                <div key={cat} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${T.border}`, fontSize: 13 }}>
+                  <span>{cat}</span>
+                  <span style={{ fontWeight: 800, color: T.ink }}>{count}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {rep.rows.length > 0 ? (
+            <div className="print-card" style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "20px 22px" }}>
+              <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.4, fontWeight: 700, marginBottom: 6 }}>Full record</div>
+              <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 14 }}>Every issue, when it was reported, and when it was closed.</div>
+              {rep.rows.map(a => {
+                const mins = minutesBetween(a.reportedAtRaw, a.resolvedAtRaw);
+                return (
+                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.ink }}>{a.status || (a.supply ? a.supply.label : "Issue")}</div>
+                      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>
+                        {[a.room, a.location].filter(Boolean).join(" · ")}
+                        {a.reportedAtRaw ? ` · ${new Date(a.reportedAtRaw).toLocaleString()}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 800, color: a.resolved ? T.green : T.yellow }}>{a.resolved ? "Resolved" : "Open"}</div>
+                      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>{formatDuration(mins)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {rep.total === 0 ? (
+            <div style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: "40px 22px", textAlign: "center", color: T.muted }}>
+              No issues reported in this period. Try a wider date range.
+            </div>
+          ) : null}
+
+          <div style={{ textAlign: "center", fontSize: 10.5, color: T.dim, marginTop: 26, lineHeight: 1.6 }}>
+            Generated by SupplyPing · supplyping.com<br />
+            Every issue timestamped when reported and when marked resolved.
+          </div>
         </div>
       </div>
     );
