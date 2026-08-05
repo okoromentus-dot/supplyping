@@ -3,6 +3,7 @@ import { supabase } from "./supabase.js";
 
 // ── CONFIG ──
 import emailjs from "@emailjs/browser";
+import * as XLSX from "xlsx";
 const EMAILJS_SERVICE = "service_np65zh6";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
 // Optional second template for the new-client welcome email. Leave blank until
@@ -437,61 +438,74 @@ function buildPerformanceReport(alerts, days) {
   };
 }
 
-function reportToCSV(rep, facility) {
-  const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-
-  // Spreadsheets mangle non-ASCII punctuation. Em dashes and middots were
-  // rendering as mojibake, so the CSV keeps to plain ASCII throughout —
-  // the on-screen report still uses the nicer characters.
-  const ascii = (v) => String(v == null ? "" : v)
-    .replace(/[\u2014\u2013]/g, "-")   // em/en dash
-    .replace(/\u00b7/g, " - ")          // middot separator
-    .replace(/[\u2018\u2019]/g, "'")   // curly single quotes
-    .replace(/[\u201c\u201d]/g, '"');  // curly double quotes
-
-  const cell = (v) => esc(ascii(v));
-
-  // Dates written in a stable, sortable format rather than locale-dependent
-  // output, so the file reads the same on any machine.
-  const stamp = (iso) => {
-    if (!iso) return "";
+// Builds a real .xlsx workbook. Excel opens it natively — no encoding
+// warnings, no mojibake, and real date and number cells rather than text.
+function buildReportWorkbook(rep, facility, rangeLabel) {
+  const stampDate = (iso) => {
+    if (!iso) return null;
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return isNaN(d.getTime()) ? null : d;
   };
 
-  const lines = [
-    [cell("SupplyPing Performance Report"), cell(facility || "")].join(","),
-    [cell("Generated"), cell(stamp(new Date().toISOString()))].join(","),
-    "",
-    [
-      cell("Issue"), cell("Location"), cell("Reported At"), cell("Resolved At"),
-      cell("Status"), cell("Response time"), cell("Response minutes"),
-    ].join(","),
+  const header = [
+    "Issue",           // A
+    "Location",        // B
+    "Reported At",     // C
+    "Resolved At",     // D
+    "Status",          // E
+    "Response time",   // F
+    "Response minutes",// G
   ];
 
-  rep.rows.forEach(a => {
+  const rows = rep.rows.map((a) => {
     const mins = minutesBetween(a.reportedAtRaw, a.resolvedAtRaw);
-    // Resolved At shows the real timestamp. Rows resolved before timing was
-    // enabled have none — say so rather than printing a misleading value.
-    const resolvedAt = a.resolvedAtRaw
-      ? stamp(a.resolvedAtRaw)
-      : (a.resolved ? "not recorded" : "");
-    lines.push([
-      cell(a.status || (a.supply && a.supply.label) || ""),
-      cell([a.room, a.location].filter(Boolean).join(" - ")),
-      cell(stamp(a.reportedAtRaw)),
-      cell(resolvedAt),
-      cell(a.resolved ? "Resolved" : "Open"),
-      cell(mins === null ? "" : formatDuration(mins)),
-      // Numeric column so the client can sort, average, or chart in Excel.
-      mins === null ? '""' : String(mins),
-    ].join(","));
+    return [
+      a.status || (a.supply && a.supply.label) || "",
+      [a.room, a.location].filter(Boolean).join(" - "),
+      stampDate(a.reportedAtRaw),
+      stampDate(a.resolvedAtRaw),           // real Date cell, or blank
+      a.resolved ? "Resolved" : "Open",
+      mins === null ? "" : formatDuration(mins),
+      mins === null ? "" : mins,            // numeric, so Excel can average/chart
+    ];
   });
 
-  return lines.join("\r\n");
+  // Title block above the table
+  const aoa = [
+    ["SupplyPing Performance Report"],
+    [facility || ""],
+    [rangeLabel || "", "", "Generated", new Date()],
+    [],
+    ["Issues reported", rep.total, "", "Average response", rep.avg === null ? "" : rep.avg],
+    ["Resolved", rep.resolvedCount, "", "Median response", rep.median === null ? "" : rep.median],
+    ["Still open", rep.openCount, "", "Fastest response", rep.fastest === null ? "" : rep.fastest],
+    [],
+    header,
+    ...rows,
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+  ws["!cols"] = [
+    { wch: 30 }, { wch: 28 }, { wch: 19 }, { wch: 19 }, { wch: 11 }, { wch: 15 }, { wch: 17 },
+  ];
+
+  // Date formatting for the two timestamp columns (C and D), data starts row 10
+  const dateFmt = "yyyy-mm-dd hh:mm";
+  for (let i = 0; i < rows.length; i++) {
+    const r = 9 + i; // 0-indexed row in the sheet
+    ["C", "D"].forEach((col) => {
+      const ref = col + (r + 1);
+      if (ws[ref] && ws[ref].t === "d") ws[ref].z = dateFmt;
+    });
+  }
+  const genRef = "D3";
+  if (ws[genRef] && ws[genRef].t === "d") ws[genRef].z = dateFmt;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Service Report");
+  return wb;
 }
+
 
 // ── TEAM ROUTING ─────────────────────────────────────────────────
 // Each report reaches the team that owns that category. Routing is driven by
@@ -2886,19 +2900,15 @@ export default function App() {
               <option value={0}>All time</option>
             </select>
             <Btn label="🖨️ Print / PDF" onClick={() => window.print()} variant="outline" size="sm" />
-            <Btn label="⬇️ CSV" onClick={() => {
+            <Btn label="⬇️ Excel" onClick={() => {
               try {
-                const csv = reportToCSV(rep, location || bizName);
-                // The BOM tells Excel the file is UTF-8; without it, Excel
-                // assumes ANSI and any non-ASCII character comes out garbled.
-                const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `SupplyPing-Report-${new Date().toISOString().slice(0, 10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch (e) { showToast("Couldn't export — try Print instead.", T.red); }
+                const wb = buildReportWorkbook(rep, location || bizName, rangeLabel);
+                const safe = String(location || bizName || "Facility").replace(/[^\w\s-]/g, "").trim().slice(0, 40) || "Facility";
+                XLSX.writeFile(wb, `SupplyPing-Report-${safe}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+              } catch (e) {
+                console.error("[Export] xlsx failed:", e);
+                showToast("Couldn't export the spreadsheet — try Print / PDF instead.", T.red);
+              }
             }} variant="outline" size="sm" />
             <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" size="sm" />
           </div>
