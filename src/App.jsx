@@ -439,22 +439,58 @@ function buildPerformanceReport(alerts, days) {
 
 function reportToCSV(rep, facility) {
   const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+
+  // Spreadsheets mangle non-ASCII punctuation. Em dashes and middots were
+  // rendering as mojibake, so the CSV keeps to plain ASCII throughout —
+  // the on-screen report still uses the nicer characters.
+  const ascii = (v) => String(v == null ? "" : v)
+    .replace(/[\u2014\u2013]/g, "-")   // em/en dash
+    .replace(/\u00b7/g, " - ")          // middot separator
+    .replace(/[\u2018\u2019]/g, "'")   // curly single quotes
+    .replace(/[\u201c\u201d]/g, '"');  // curly double quotes
+
+  const cell = (v) => esc(ascii(v));
+
+  // Dates written in a stable, sortable format rather than locale-dependent
+  // output, so the file reads the same on any machine.
+  const stamp = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
   const lines = [
-    [esc("SupplyPing Performance Report"), esc(facility || "")].join(","),
+    [cell("SupplyPing Performance Report"), cell(facility || "")].join(","),
+    [cell("Generated"), cell(stamp(new Date().toISOString()))].join(","),
     "",
-    [esc("Issue"), esc("Location"), esc("Reported"), esc("Resolved"), esc("Response time")].join(","),
+    [
+      cell("Issue"), cell("Location"), cell("Reported At"), cell("Resolved At"),
+      cell("Status"), cell("Response time"), cell("Response minutes"),
+    ].join(","),
   ];
+
   rep.rows.forEach(a => {
     const mins = minutesBetween(a.reportedAtRaw, a.resolvedAtRaw);
+    // Resolved At shows the real timestamp. Rows resolved before timing was
+    // enabled have none — say so rather than printing a misleading value.
+    const resolvedAt = a.resolvedAtRaw
+      ? stamp(a.resolvedAtRaw)
+      : (a.resolved ? "not recorded" : "");
     lines.push([
-      esc(a.status || (a.supply && a.supply.label) || ""),
-      esc([a.room, a.location].filter(Boolean).join(" · ")),
-      esc(a.reportedAtRaw ? new Date(a.reportedAtRaw).toLocaleString() : ""),
-      esc(a.resolvedAtRaw ? new Date(a.resolvedAtRaw).toLocaleString() : (a.resolved ? "Resolved" : "Open")),
-      esc(formatDuration(mins)),
+      cell(a.status || (a.supply && a.supply.label) || ""),
+      cell([a.room, a.location].filter(Boolean).join(" - ")),
+      cell(stamp(a.reportedAtRaw)),
+      cell(resolvedAt),
+      cell(a.resolved ? "Resolved" : "Open"),
+      cell(mins === null ? "" : formatDuration(mins)),
+      // Numeric column so the client can sort, average, or chart in Excel.
+      mins === null ? '""' : String(mins),
     ].join(","));
   });
-  return lines.join("\n");
+
+  return lines.join("\r\n");
 }
 
 // ── TEAM ROUTING ─────────────────────────────────────────────────
@@ -2853,7 +2889,9 @@ export default function App() {
             <Btn label="⬇️ CSV" onClick={() => {
               try {
                 const csv = reportToCSV(rep, location || bizName);
-                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                // The BOM tells Excel the file is UTF-8; without it, Excel
+                // assumes ANSI and any non-ASCII character comes out garbled.
+                const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
