@@ -6,9 +6,15 @@ import emailjs from "@emailjs/browser";
 import * as XLSX from "xlsx";
 const EMAILJS_SERVICE = "service_np65zh6";
 const EMAILJS_TEMPLATE = "template_58s7r9h";
-// Optional second template for the new-client welcome email. Leave blank until
-// it's created in EmailJS — the welcome send is skipped rather than failing.
-const EMAILJS_WELCOME_TEMPLATE = "template_xgh05zq";
+// One shared "general" template for anything that ISN'T a hazard alert —
+// welcome emails, trial reminders, future system notices. EmailJS free tier
+// caps accounts at 2 templates, so this keeps the whole app at exactly 2:
+// EMAILJS_TEMPLATE (hazard alerts, fixed fields like location/room/severity)
+// and this one (everything else, generic subject/heading/message fields).
+// Point it at an existing flexible template — e.g. a repurposed "Contact Us"
+// template — as long as that template's To Email is {{to_email}} and its
+// body prints {{heading}} and {{message}}.
+const EMAILJS_GENERAL_TEMPLATE = "template_xgh05zq";
 const GUIDE_URL = "https://supplyping.com/qr-placement-guide.pdf";
 const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
@@ -363,6 +369,54 @@ const AREA_TYPES = [
   { id: "warehouse", label: "🏭 Warehouse Floor" },
   { id: "supply", label: "📦 Restroom / Supplies" },
 ];
+
+// ── FACILITY FALLBACK (/f/{slug}) ────────────────────────────────
+// A backup entry point for when a QR code is damaged, missing, or a worker
+// is between zones. It loads that facility's saved areas so the report still
+// carries a real location — the fallback must never produce an unlabelled
+// report, which is the whole reason QR codes exist.
+function facilitySlug(name) {
+  return String(name || "").toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+}
+
+async function fetchFacilityBySlug(slug) {
+  const clean = String(slug || "").toLowerCase().trim();
+  if (!clean) return null;
+  try {
+    const res = await fetch(
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?maxRecords=200`,
+      { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (!res.ok || !data.records) {
+      console.error("[Fallback] Clients read failed:", res.status);
+      return null;
+    }
+    // Match on a slug of the facility name, then the business name.
+    const hit = data.records.find(r => {
+      const f = r.fields || {};
+      return facilitySlug(f["Facility Name"]) === clean
+          || facilitySlug(f["Business Name"]) === clean;
+    });
+    if (!hit) {
+      console.warn(`[Fallback] No facility matched slug "${clean}"`);
+      return null;
+    }
+    const f = hit.fields;
+    let rooms = [];
+    if (f["Locations"]) { try { rooms = JSON.parse(f["Locations"]) || []; } catch (e) { rooms = []; } }
+    return {
+      facility: f["Facility Name"] || f["Business Name"] || "",
+      business: f["Business Name"] || "",
+      cleaningEmail: f["Cleaning Team Email"] || "",
+      rooms: Array.isArray(rooms) ? rooms : [],
+    };
+  } catch (e) {
+    console.error("[Fallback] Lookup error:", e);
+    return null;
+  }
+}
 
 // ── PERFORMANCE REPORTING ────────────────────────────────────────
 // Turns raw reports into the numbers a client actually asks for at a
@@ -761,24 +815,47 @@ function saveProfileBackup(email, profile) {
 // Sends the new-client welcome email with the placement guide. Silently skips
 // if no welcome template is configured, so onboarding never breaks on it.
 async function sendWelcomeEmail({ toEmail, businessName, facility }) {
-  if (!EMAILJS_WELCOME_TEMPLATE || !toEmail) {
-    console.log("[Welcome] Skipped — EMAILJS_WELCOME_TEMPLATE not set yet.");
+  if (!EMAILJS_GENERAL_TEMPLATE || !toEmail) {
+    console.log("[Welcome] Skipped — EMAILJS_GENERAL_TEMPLATE not set yet.");
     return false;
   }
+  const who = businessName || "your facility";
   try {
-    await emailjs.send(EMAILJS_SERVICE, EMAILJS_WELCOME_TEMPLATE, {
-      to_email: toEmail,
-      email: toEmail,
-      cleaning_email: toEmail,
-      business: businessName || "your facility",
-      facility: facility || "",
-      guide_link: GUIDE_URL,
-      dashboard_link: "https://supplyping.com",
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_GENERAL_TEMPLATE, {
+      to_email: toEmail, email: toEmail, cleaning_email: toEmail,
+      subject: `Welcome to SupplyPing, ${who}`,
+      heading: "Your SupplyPing account is live",
+      message: `Before you print your QR codes, here's a two-minute guide on where to place them — it's the single biggest factor in whether a pilot works: ${GUIDE_URL}\n\nYour dashboard: https://supplyping.com\n\nReply to this email if anything's unclear — I read every one.\n\nMentus, SupplyPing`,
+      // Kept for templates still using the older welcome-specific fields.
+      business: who, facility: facility || "",
+      guide_link: GUIDE_URL, dashboard_link: "https://supplyping.com",
     });
     console.log("[Welcome] Sent to", toEmail);
     return true;
   } catch (e) {
     console.error("[Welcome] Failed:", e && (e.text || e.message));
+    return false;
+  }
+}
+
+// Sends an internal account/system notice (trial reminders, etc.) using its
+// own EmailJS template, so subject and wording never get forced into the
+// hazard-report format. Fails soft and logs, same as the welcome email.
+async function sendAccountNotice({ subject, headline, body, toEmail }) {
+  if (!EMAILJS_GENERAL_TEMPLATE) {
+    console.log("[AccountNotice] Skipped — EMAILJS_GENERAL_TEMPLATE not set yet:", subject);
+    return false;
+  }
+  try {
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_GENERAL_TEMPLATE, {
+      to_email: toEmail, email: toEmail,
+      subject, heading: headline, message: body,
+      time: new Date().toLocaleString(),
+    });
+    console.log("[AccountNotice] Sent:", subject);
+    return true;
+  } catch (e) {
+    console.error("[AccountNotice] Failed:", e && (e.text || e.message));
     return false;
   }
 }
@@ -964,6 +1041,9 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
   const [queuedCount, setQueuedCount] = useState(0);
   const [reportDays, setReportDays] = useState(30); // 0 = all time
+  const [fallbackData, setFallbackData] = useState(null);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+  const [fallbackSlug, setFallbackSlug] = useState("");
   const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
@@ -1056,7 +1136,7 @@ export default function App() {
     // Never hijack QR report links, password reset, or the legal pages.
     const isPublicFlow =
       path === "/r" || path.startsWith("/r/") || params.has("ce") || params.has("l") ||
-      path === "/reset" || path === "/terms" || path === "/privacy" ||
+      path === "/reset" || path === "/terms" || path === "/privacy" || path.startsWith("/f/") ||
       hash.includes("type=recovery");
     if (isPublicFlow) return;
 
@@ -1231,11 +1311,14 @@ export default function App() {
       const dedupeKey = `sp_trial_notice_${data.user.email}_${left <= 3 ? left : "na"}`;
       if ((left === 3 || left === 0) && !localStorage.getItem(dedupeKey)) {
         localStorage.setItem(dedupeKey, "1");
-        sendOrQueueAlert({
-          cleaning_email: MANAGEMENT_EMAIL, to_email: MANAGEMENT_EMAIL, email: MANAGEMENT_EMAIL,
-          issue: left === 0 ? `⏰ TRIAL ENDED: ${bizName || data.user.email}` : `⏰ Trial ending in 3 days: ${bizName || data.user.email}`,
-          location: location || "", room: "", stall: "",
-          business: bizName || data.user.email, time: new Date().toLocaleString(),
+        const who = bizName || location || data.user.email;
+        sendAccountNotice({
+          toEmail: MANAGEMENT_EMAIL,
+          subject: left === 0 ? `Trial ended — ${who}` : `Trial ending in 3 days — ${who}`,
+          headline: left === 0 ? "A client's free trial has ended" : "A client's free trial ends in 3 days",
+          body: left === 0
+            ? `${who} (${data.user.email}) has reached the end of their 14-day free trial. Reach out to discuss converting to a paid plan.`
+            : `${who} (${data.user.email}) has 3 days left on their 14-day free trial. Good time for a check-in call before it lapses.`,
         });
       }
     }).catch(() => setTrialDaysLeft(null));
@@ -1266,6 +1349,25 @@ export default function App() {
     }
     if (path === "/terms") { setScreen("terms"); return; }
     if (path === "/privacy") { setScreen("privacy"); return; }
+
+    // Facility fallback: /f/{slug} — a backup when a code is unreadable.
+    if (path.startsWith("/f/")) {
+      const slug = decodeURIComponent(path.slice(3)).replace(/\/$/, "");
+      setFallbackSlug(slug);
+      setScreen("facility");
+      setFallbackLoading(true);
+      fetchFacilityBySlug(slug).then((data) => {
+        setFallbackLoading(false);
+        if (data) {
+          setFallbackData(data);
+          setQrBusiness(data.business || "");
+          setQrLocation(data.facility || "");
+          setAlertEmail(data.cleaningEmail || "");
+        }
+      });
+      return;
+    }
+
     const locationParam = params.get("location");
     if (locationParam) { setLocation(locationParam); setQrLocation(locationParam); }
     if (isQR) {
@@ -1865,7 +1967,30 @@ export default function App() {
               ))}
             </div>
             {/* Placement guide — the thing that decides whether a pilot works */}
-            <a href={GUIDE_URL} target="_blank" rel="noopener noreferrer"
+            {/* Facility fallback link — a backup entry point clients can post or
+            share when a code is damaged or missing. */}
+        {location ? (
+          <Card style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>🔗 Backup Link</div>
+            <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 12px", lineHeight: 1.55 }}>
+              For when a code is damaged, missing, or someone's between zones. Opens a list of your areas to pick from. QR codes are still faster — this is the safety net.
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <code style={{ flex: "1 1 220px", background: T.cream, border: `1px solid ${T.border}`, borderRadius: 9, padding: "11px 13px", fontSize: 12.5, color: T.ink, wordBreak: "break-all" }}>
+                {`supplyping.com/f/${facilitySlug(location)}`}
+              </code>
+              <Btn label="Copy" onClick={() => {
+                const url = `https://supplyping.com/f/${facilitySlug(location)}`;
+                try {
+                  navigator.clipboard.writeText(url);
+                  showToast("✅ Backup link copied", T.green);
+                } catch (e) { showToast(url, T.blue); }
+              }} variant="outline" size="sm" />
+            </div>
+          </Card>
+        ) : null}
+
+        <a href={GUIDE_URL} target="_blank" rel="noopener noreferrer"
               style={{ display: "block", textDecoration: "none", background: T.orangeLight, border: `1.5px solid #FED7AA`, borderRadius: 14, padding: "16px 18px", marginBottom: 16, textAlign: "left" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ fontSize: 26 }}>📄</div>
@@ -3025,6 +3150,80 @@ export default function App() {
             {(location || bizName || "Facility")} — Service Report · {rangeLabel}
           </div>
           <div>supplyping.com</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── FACILITY FALLBACK: pick your area, then report ──
+  if (screen === "facility") {
+    return (
+      <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <style>{`* { box-sizing: border-box; }`}</style>
+        {toast && <Toast msg={toast.msg} color={toast.color} />}
+        <div style={{ width: "100%", maxWidth: 460 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 22, justifyContent: "center" }}>
+            <div style={{ width: 32, height: 32, background: T.ink, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📋</div>
+            <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>SupplyPing</span>
+          </div>
+
+          {fallbackLoading ? (
+            <Card style={{ textAlign: "center", padding: "40px 24px" }}>
+              <div style={{ fontSize: 14, color: T.muted }}>Loading facility…</div>
+            </Card>
+          ) : !fallbackData ? (
+            <Card style={{ textAlign: "center", padding: "34px 24px" }}>
+              <div style={{ fontSize: 34, marginBottom: 12 }}>🔍</div>
+              <h2 style={{ fontFamily: font.display, fontSize: 21, fontWeight: 700, margin: "0 0 8px" }}>Facility not found</h2>
+              <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: "0 0 18px" }}>
+                We couldn't find a facility matching "{fallbackSlug}". Check the link with your supervisor, or scan any SupplyPing code on the wall.
+              </p>
+              <Btn label="Go to SupplyPing" onClick={() => { window.location.href = "/"; }} variant="outline" full />
+            </Card>
+          ) : (
+            <>
+              <div style={{ textAlign: "center", marginBottom: 18 }}>
+                <h2 style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, margin: "0 0 6px" }}>
+                  {fallbackData.facility || "Report an Issue"}
+                </h2>
+                <p style={{ fontSize: 13, color: T.muted, margin: 0, lineHeight: 1.5 }}>
+                  Where are you? Pick your area to continue.
+                </p>
+              </div>
+
+              <Card>
+                {fallbackData.rooms.length === 0 ? (
+                  <div style={{ fontSize: 13, color: T.muted, textAlign: "center", padding: "16px 0", lineHeight: 1.6 }}>
+                    No areas are set up for this facility yet. Ask your supervisor to add locations in SupplyPing.
+                  </div>
+                ) : (
+                  fallbackData.rooms.map((room, i) => (
+                    <button key={i} type="button"
+                      onClick={() => {
+                        // Hand off to the normal report flow with real location
+                        // data, so a fallback report is indistinguishable from
+                        // a scanned one once it reaches the dashboard.
+                        setQrRoom(room.name || "");
+                        setQrStall("");
+                        setQrCategory(room.category || "");
+                        setQrLocation(fallbackData.facility || "");
+                        setQrBusiness(fallbackData.business || "");
+                        setAlertEmail(fallbackData.cleaningEmail || "");
+                        setScreen("report");
+                      }}
+                      style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: T.white, border: `2px solid ${T.border}`, borderRadius: 12, padding: "15px 16px", marginBottom: 9, cursor: "pointer", fontFamily: font.body, boxShadow: T.shadow }}>
+                      <span style={{ fontSize: 14.5, fontWeight: 600, color: T.ink }}>📍 {room.name || `Area ${i + 1}`}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: T.orange }}>→</span>
+                    </button>
+                  ))
+                )}
+              </Card>
+
+              <div style={{ textAlign: "center", fontSize: 11.5, color: T.dim, marginTop: 16, lineHeight: 1.6 }}>
+                Tip: scanning the code on the wall is faster and records your exact spot.
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
