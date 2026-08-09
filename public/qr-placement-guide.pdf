@@ -1,118 +1,704 @@
 %PDF-1.4
-%“Œ‹ž ReportLab Generated PDF document (opensource)
+%âãÏÓ
 1 0 obj
 <<
-/F1 2 0 R /F2 3 0 R /F3 4 0 R
+/Producer (pypdf)
 >>
 endobj
 2 0 obj
 <<
-/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+/Type /Pages
+/Count 3
+/Kids [ 4 0 R 11 0 R 13 0 R ]
 >>
 endobj
 3 0 obj
 <<
-/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+/Type /Catalog
+/Pages 2 0 R
 >>
 endobj
 4 0 obj
 <<
-/BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding /Name /F3 /Subtype /Type1 /Type /Font
+/Contents 5 0 R
+/MediaBox [ 0 0 612 792 ]
+/Resources <<
+/Font <<
+/F1 6 0 R
+/F1-0 7 0 R
+/F2 8 0 R
+/F2-0 9 0 R
+/F3 10 0 R
+>>
+/ProcSet [ /ImageB /ImageC /ImageI /PDF /Text ]
+>>
+/Rotate 0
+/Trans <<
+>>
+/Type /Page
+/Annots [ ]
+/Parent 2 0 R
 >>
 endobj
 5 0 obj
 <<
-/Contents 11 0 R /MediaBox [ 0 0 612 792 ] /Parent 10 0 R /Resources <<
-/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
->> /Rotate 0 /Trans <<
-
->> 
-  /Type /Page
+/Length 7287
 >>
+stream
+q
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+.101961 .094118 .078431 rg
+n 0 723.6 612 68.4 re f*
+.972549 .968627 .956863 rg
+n
+56.4 740.16 m
+67.44 740.16 l
+70.7568 740.16 73.44 742.8432 73.44 746.16 c
+73.44 757.2 l
+73.44 760.5168 70.7568 763.2 67.44 763.2 c
+56.4 763.2 l
+53.0832 763.2 50.4 760.5168 50.4 757.2 c
+50.4 746.16 l
+50.4 742.8432 53.0832 740.16 56.4 740.16 c
+h
+f*
+.101961 .094118 .078431 rg
+BT /F2 13 Tf 15.6 TL ET
+BT 1 0 0 1 56.88 746.64 Tm (SP) Tj T* ET
+1 1 1 rg
+BT /F2 15 Tf 18 TL ET
+BT 1 0 0 1 83.52 754.56 Tm (SupplyPing) Tj T* ET
+.541176 .521569 .482353 rg
+BT /F1 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 83.52 743.04 Tm (QR Code Placement Guide) Tj T* ET
+.917647 .345098 .047059 rg
+BT /F2 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 496.422 748.8 Tm (supplyping.com) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 20 Tf 24 TL ET
+BT 1 0 0 1 50.4 687.6 Tm (Where the codes go) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F1 10.5 Tf 12.6 TL ET
+BT 1 0 0 1 50.4 663.84 Tm (One principle decides every placement: a code belongs where a person is standing when they notice a) Tj T* ET
+BT 1 0 0 1 50.4 648.84 Tm (problem and can't easily do anything about it. Not where it's convenient to hang a sign. If someone has to) Tj T* ET
+BT 1 0 0 1 50.4 633.84 Tm (walk to find the code, they won't scan it.) Tj T* ET
+1 .968627 .929412 rg
+.996078 .843137 .666667 RG
+1 w
+n
+58.4 559.8 m
+553.6 559.8 l
+558.0224 559.8 561.6 563.3776 561.6 567.8 c
+561.6 596.44 l
+561.6 600.8624 558.0224 604.44 553.6 604.44 c
+58.4 604.44 l
+53.9776 604.44 50.4 600.8624 50.4 596.44 c
+50.4 567.8 l
+50.4 563.3776 53.9776 559.8 58.4 559.8 c
+h
+B*
+.917647 .345098 .047059 rg
+BT /F2 9 Tf 10.8 TL ET
+BT 1 0 0 1 63.36 588.6 Tm (THE TEST) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 63.36 572.76 Tm (Stand where a problem gets noticed. Can you see a code without walking? If not, add one.) Tj T* ET
+.917647 .345098 .047059 rg
+BT /F2 8 Tf 9.6 TL ET
+BT 1 0 0 1 50.4 543.24 Tm (PLACEMENT BY FACILITY TYPE) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 50.4 525.24 Tm (Warehouses, plants & distribution centers) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 511.56 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 511.56 Tm (One beside each dock door, at eye level) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 500.4 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 500.4 Tm (Each end of every main aisle) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 489.24 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 489.24 Tm (Outside each restroom entrance \(not inside\)) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 478.08 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 478.08 Tm (Breakroom and locker areas) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 466.92 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 466.92 Tm (Beside time clocks \227 everyone passes at shift change) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F3 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 67.68 455.76 Tm (Roughly one per 5,000-10,000 sq ft, plus every restroom.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 50.4 434.16 Tm (Cleaning & facility service contracts) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 420.48 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 420.48 Tm (Entry lobby \(visible to the client, not just your crew\)) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 409.32 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 409.32 Tm (Each restroom you service) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 398.16 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 398.16 Tm (Elevator lobby on every floor) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 387 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 387 Tm (Break areas and kitchens) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F3 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 67.68 375.84 Tm (Match your contract scope \227 every area you're responsible for.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 50.4 354.24 Tm (Senior living communities) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 340.56 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 340.56 Tm (Each corridor, at the nursing-station end) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 329.4 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 329.4 Tm (Common areas, dining and activity rooms) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 318.24 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 318.24 Tm (Every public restroom) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 307.08 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 307.08 Tm (Entry and family visiting areas) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F3 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 67.68 295.92 Tm (Staff should never be more than one hallway from a code.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 50.4 274.32 Tm (Hospitals & clinics) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 260.64 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 260.64 Tm (One per unit corridor) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 249.48 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 249.48 Tm (Soiled utility and supply rooms) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 238.32 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 238.32 Tm (Public restrooms and waiting areas) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 227.16 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 227.16 Tm (Staff corridors and break rooms) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F3 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 67.68 216 Tm (Start with non-clinical areas for a pilot \227 easier approval.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 50.4 194.4 Tm (Airports, rail & transit hubs) Tj T* ET
+BT /F1 9.5 Tf 11.4 TL ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 180.72 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 180.72 Tm (Each concourse or platform segment) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 169.56 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 169.56 Tm (Every restroom entrance) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 158.4 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 158.4 Tm (Baggage claim and ticketing areas) Tj T* ET
+.917647 .345098 .047059 rg
+BT 1 0 0 1 56.16 147.24 Tm (\177) Tj T* ET
+.419608 .4 .376471 rg
+BT 1 0 0 1 67.68 147.24 Tm (Staff corridors and back-of-house) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F3 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 67.68 136.08 Tm (Zone by the crew that covers it, not by square footage.) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F1 7.5 Tf 9 TL ET
+BT 1 0 0 1 50.4 32.4 Tm (SupplyPing \227 QR Code Placement Guide) Tj T* ET
+BT 1 0 0 1 537.8325 32.4 Tm (Page 1) Tj T* ET
+.909804 .898039 .87451 RG
+.5 w
+n 50.4 44.64 m 561.6 44.64 l S
+ 
+
+Q
+
+q
+0.0 0.0 612 792 re
+W
+n
+1 0 0 1 0 0 cm
+BT
+/F1-0 12 Tf
+14.4 TL
+ET
+0.85098 0.835294 0.8 rg
+BT
+/F2-0 8 Tf
+9.6 TL
+ET
+BT
+1 0 0 1 511.792 737.64 Tm
+(833\055917\0555833) Tj
+T*
+ET
+Q
+
+
+endstream
 endobj
 6 0 obj
 <<
-/Contents 12 0 R /MediaBox [ 0 0 612 792 ] /Parent 10 0 R /Resources <<
-/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
->> /Rotate 0 /Trans <<
-
->> 
-  /Type /Page
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+/Name /F1
+/Subtype /Type1
+/Type /Font
 >>
 endobj
 7 0 obj
 <<
-/Contents 13 0 R /MediaBox [ 0 0 612 792 ] /Parent 10 0 R /Resources <<
-/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
->> /Rotate 0 /Trans <<
-
->> 
-  /Type /Page
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+/Name /F1
+/Subtype /Type1
+/Type /Font
 >>
 endobj
 8 0 obj
 <<
-/PageMode /UseNone /Pages 10 0 R /Type /Catalog
+/BaseFont /Helvetica-Bold
+/Encoding /WinAnsiEncoding
+/Name /F2
+/Subtype /Type1
+/Type /Font
 >>
 endobj
 9 0 obj
 <<
-/Author (SupplyPing) /CreationDate (D:20260731170251+00'00') /Creator (anonymous) /Keywords () /ModDate (D:20260731170251+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
-  /Subject (unspecified) /Title (SupplyPing \204 QR Code Placement Guide) /Trapped /False
+/BaseFont /Helvetica-Bold
+/Encoding /WinAnsiEncoding
+/Name /F2
+/Subtype /Type1
+/Type /Font
 >>
 endobj
 10 0 obj
 <<
-/Count 3 /Kids [ 5 0 R 6 0 R 7 0 R ] /Type /Pages
+/BaseFont /Helvetica-Oblique
+/Encoding /WinAnsiEncoding
+/Name /F3
+/Subtype /Type1
+/Type /Font
 >>
 endobj
 11 0 obj
 <<
-/Filter [ /ASCII85Decode /FlateDecode ] /Length 2365
+/Contents 12 0 R
+/MediaBox [ 0 0 612 792 ]
+/Resources <<
+/Font <<
+/F1 6 0 R
+/F1-0 7 0 R
+/F2 8 0 R
+/F2-0 9 0 R
+/F3 10 0 R
 >>
-stream
-Gatm=gMYb8&:N/3bYusn2Ttuo01B\*D1GmH=?r"c0.Uc`D,$-B8QjEtpWW&'U(Z4?74!KG20W]YcK37YjcPK$T)P.]Lor)sb<(bIT-eXM678SN#9$B-Not^km#g=?U$&9I9[YWaW*YET*)6@HM(-HL35q:hdeqA2aV$fF1NKc\NVs!P&Uk&YR8FZ.?P9r1(Xm+5-Vh0Y(8Jfj'(##bO9F^Fmm*ec?cN!p+5(4i3'JEAX4VP=O!Sn2iW,%A)Z>##+m;?LM?:gm=h%d.Y1"%n<a#N!l%Mu@F=W8c0>uf:h_?3)7r4BemANbJP8@o]8$JmG4oXkP00s!7C?7/iZ_F(1DdLoR+.Bk$NGogW8W'mNoQrT4i']gJKh`=$3Lf]Qf\NKHd?E`]J=+9.]j;DjO(%;Y;6\XP3K?tq_D4n9$"4JLp<PC6?-OYN'I&ko=gmu"7a5IN@g7?)+sdL>2e20,M&U$>4$BW!b[>C^Ff%p6<As\[CY[+TX&WNUs8'QU=cjdiiW]%$S0j9$h-Wg3G]/q3Enmgk7J-^F*aclkaa_h#=r1X'2)bA;8m9iHbgj:d1m>IZQ1@5l4'HiOrKW&U6;q#djeAHNL+$^el_Z.'2:T"-SA?cSW+>BZ.]ZV3f[W@h*=t-1!OAl/Bd$O\0pIUe<D-4HWn>_#_V]P(P(eg.[:r4?%Xk?\MaFhT)PAT&A>qNmg5;2JpJRb%V*j_7e5Rr$iM&umi:1l5K"YU$U:=i=Es4h"1G6nr[M@h<!0aZ-A^#^pHoT2[^Go@3_b7osm0._Ko=osmr/U_[VCnaU.*<*2X&0Qco9g?W!7+p-miG!(`t..C+A(Sk1;P34+2-[$%Jcr/`ieV-&.>_*@Q3?W7ZUj9#(p2qo#b'#[o_<r08Wb2NMS91U$*744=eB[5MVF4lfu_*A7oLqo+B,R,nQWE2JXXhN+k&]S\-XX9Vsp$54P2^1)^Dm+n0?U/nE_h5bC&YNI]Y])eu2811mT@--%Ql'-d31%S,m#+>K>t@a]N>>;=q"ah3YLNP5_VRh'G@`ui?o-?SpGhS$UOs5Eq;.o!b7N*etVSu3#34N<CNV&sh0rt;`X>oVI%0QiVabYL&o9j=[_VH)Q2*;Ko\3)2a46Y7dj47id(g7hZ`\1HX0XZL`5P4UCEidNLTLChDp]PdoqDRgf1">ComAHN\Ns5ZhW:O\?H<=P"?P'2uqOCRgu?Mar+b;L:>FFSb`i$9MPRTm4,$!!-b:%@6In/,DtAt:GJ6e<"@H.*gN=A-Rt<NUe\X[S)8E;)//J5jX;mTuNC2Z]\M6gu-">h)a-CQ+eF"e72\69L1g<,ci9&hjID6,8bBa&]<=Kc"#]G<Tc#p,gm6[:kYE*2(PSc!/?$!$6h[X>:fd=3<*25,$SfpPBqRhZm:P;:L`eQYNj/U,HfKYZ,`']'cEXncq&Pd_',ufQ<*@(BDa+\L.eP2DkTJ/u0o+6hlN#,$0J5G@9D+JK#0m"phiR4Zi+c5#;Xp^k7.l0^]Kse*.@qnXpeSqSN2dDES?pCbE5:cp+"sjW[W%?H_a#al?u.0IT*q!ld`%D@3$prJB0Y/FE@])Rc5f1$DfJ<GbHg,%O#\?@^L#`Kqo=^tI2*EX^!%d^`FrNo%<,GM36meFg0j"]X.4Yt9L![T^iqT4gX*k7nmU3-AMl-5PcEIHLG:0JD.+EJrtMSYR;dM(r292Pk/R4F>?XR%=QU$9\DNmdmH]e]d^lS?1hLDK(G*9LQJV6'4>gcMVKT[r=<V%>+_>%^lc;A==u.kR[bK3QR@^pXE@_Gj2HPTdO5a-I9rD;#-\]:;u<A_]"3"!5m-!ZFO*-=NV?6C,:=n-(H2or@I6656d0/7Tac``JdF7;)G5YWq8@S$lil`/W-Y1X4?"AkfMl/\`tPN8,%L4c!%NLi:\4WWDr]HZdb&lmZ#_1T'H^XCjQjCP^U!3(f>aL%BK7e!On=DjGYc1l#)2BbIh+!P`(!P%]enY!B8&%BZeh*4;%9?!U1uL$@GX"8WV0##3/[Lf'gh-QGbnaX]msEUFRiJ9cf,-eoT>5IS$1>1i0%rMFR,(Z!Q&4K.,$8S6ct7U496/F]Gmnq-']u$-E>dLl.Lfl.NDm93in_&o0W2[[*4>RZg2Rm'eT8$TkN<9J6)djGC/(`S%JIh\.\-RV)9Rm&A(u)mKFZp?/Wt@NcLL-O=91fN)F4*Ls$6QjbM34TUW+WQ=N]X8/T@CNSu<on'\(hLBU+7/*lt.83H@34Tg?SII#0=Q+PsmmceJ9i]`\SB_KRH'B.6fi,SeDgcd'B#HC@s*omQ(DS2j)Yh]Gg^X/:47Y&;lG>,%5(X388JlaNZ5EYOUXG1J+d^67I=l?:"l52PoH-I8WX]~>endstream
+/ProcSet [ /ImageB /ImageC /ImageI /PDF /Text ]
+>>
+/Rotate 0
+/Trans <<
+>>
+/Type /Page
+/Annots [ ]
+/Parent 2 0 R
+>>
 endobj
 12 0 obj
 <<
-/Filter [ /ASCII85Decode /FlateDecode ] /Length 2137
+/Length 4704
 >>
 stream
-Gatm;gN)%<&q/qEFQF[8Unh/K#+)u=d4%(QXck^W]rk?1AHWK26j!jM!CS_N^Sb^0M-=,(V3\iW*!"IDF8C"Q5thmi`r<=4LgI4IT<Da^'3[7-B-O,$)nK-'6la0G*g;D[/<3AN(M/oP1u'^0Cb:fLjHO.Y?=M6RWVLETWZmR.7A@rJ4=TbOnK[^R(,EpO72C_>Vf%V5,(!F\71k@XcQ4\QBt0W<pe2`p3T$kRo26>JiN6OR7mb43iF"*1EI2lhJ(J`IIUO!I'iE)mrE;\Ma@KEY#MA,S_7;S-k/\U&KXd)h=>)Q?`oMCb4nK'"WJ=d]cN$,2a)dPSYUmKZ*/WqDS*RQ@dcq?HIE)jBD=kc0oTmWqm?FT3Lf.hOk/#?Mh4";s[_Fu2-R;#0El,/fb`TrI9N%9BG^peH>XUj>3@>[u$,QUa76fG4VRK%F]$pUK5>LTL++(*I0*>/$9L]blP804]Nm@9ka/f@#$2Z8Bl!6?"Xt@pFC>0bUqI1M/L`IepB<o<5cc\WXm!cBA5JdMN:"uB75Q@%EfK4sTF.V:qKId4U5O%lb1EIL]?ortf%$32anPO>,)6-e$HNolDYa%pilnoZ/Y75nN:o`g#:*W>FZl\JL2mMH3nDRSd#2@P86$XDb#=6,WO_k&Bjc"Lj_<uYEMUo:h/ZR:ZUkkh'Lm+796N]*7&<\<-e,!AgF%0C"`\YIdC29]L(UUiam@(IW@7R^D7RsIc;e(SEdl(=q>%>Y(;pu$K_._Brqs.\Z;0!gfC>-L`VaVok:JXM=lCh5?FK!9djMo*WQg9WS/^f"'p3X]u(tH#W>cn63G2(JHD)Lme>/P$4)dH:jfm_]fs6TKe"'SqaJ>+pg\/4e_BmTNGo)Z;UW6cI<B^7_]$^jBmIZ@1p8U,qOK\'uscpk(b@OibYEH#mQrcLQ=aXlK2^kPou8'UG+*M#(tW=]<5gdha"`;d9L!Bg-IgPtSdUlCqh)FO\Dg+a:REh8#CA^n8@R;p<%6]'BHSa$YC_NP%R\R1'chl%KB9$5*ZcY?69ZVu2eR]AZ9Z*bKS*3)ME3V4CP[e61\:V+J3g44MmSa+`W\@C;#ok$\FL"2SEb>-leN57Ie^ioq&;5s6m[UiH]Ls0`'Bo/,jPt6Mo2r*a!B9rIFOCjS=7Hg5-9u%2-1Eu.n4%"^rWlG2Lr>=I)c<'YYXfb0T3Js@&a.Nmjm4E9E9cL\h_sonk,@]1N8`XTNJE.oR(nK\qc2h"='fnNb.&V>Q?*BPq.sc]UqMB\"jare"(X"23@2:=-*6BQp;\U\\H.8KubkL>d8(O?7<E&*Bk`fs.-#;.Y$"\n(;3F%(+S1t=j"m]mr*_&M*c">RAoStD^H!hYbh"E)r\<0M'$1Xe=7`-rEQfr:7'!&,\/h5eYiJm%c)a@s(sHE2#]M\C#lj+iX@6KE=c7`[;pZg>+#uZ^I?IoH)!pWHK],D\cI,JR4*MI[-'dZOIAeo?L@_>JX_:P(fDqM:PN<B*F=QGT4koL`EqmRu>*T<r]>W/]drC/s5Hhob6*KN+DO$n7+>Qc@d(thg5F:.@&Zh%AmPYhMDPl!d@IO(0]gDkHd[#lJ_65`QI[%Y[*&3.o5,oRTLMaP(o0pTOYg.+7\BoqS2tq="raQ"KgOh\=d<X]WcH^?M_rlWemFor<dF$s(c%L<GCCDP@pj44^jgn.7lJVO;o$+r6Ej!XDIslN0X,H)co_S.DH?Hg=Q(en'_=oFLPn=D"Jt1amhO`+iR6.%X6h:-l";#GQ@0YhI8U0,RO;._^S.*)OGFT*<F4-*'g\:?jHa$@7]40^N)l#Jb\,)LlK]itm*hl$:ChoiUo;[r?K22Gc1q<p-EmKB8pQ72jotS58hgN&>Eoq]XVS6J*mcglE9BF'ihX,Qf/WUG#WRfgtA#h89QCpERi;BNqm76(*I/u)+:i=b'ZJs<Y!G.d4E<b(HedF;o"+[tk3"$pON)3=cG&)K55])o@eJi:pIPRH7QhO.hQ.Z0shWBS#",BHgVp4(^\/k`kPC"9DmKo;&hmDm5>4Tic^;6s#5GD3kkZ'dhX][MG^&j)CpZ8m7@oI(bnDZ)Cc+Si#T]A\tU"I^E7#A)]Dpr9[ad<;F!o,C(_p%.BqedH.@:eYK6&YaET(%;(~>endstream
+q
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+.101961 .094118 .078431 rg
+n 0 723.6 612 68.4 re f*
+.972549 .968627 .956863 rg
+n
+56.4 740.16 m
+67.44 740.16 l
+70.7568 740.16 73.44 742.8432 73.44 746.16 c
+73.44 757.2 l
+73.44 760.5168 70.7568 763.2 67.44 763.2 c
+56.4 763.2 l
+53.0832 763.2 50.4 760.5168 50.4 757.2 c
+50.4 746.16 l
+50.4 742.8432 53.0832 740.16 56.4 740.16 c
+h
+f*
+.101961 .094118 .078431 rg
+BT /F2 13 Tf 15.6 TL ET
+BT 1 0 0 1 56.88 746.64 Tm (SP) Tj T* ET
+1 1 1 rg
+BT /F2 15 Tf 18 TL ET
+BT 1 0 0 1 83.52 754.56 Tm (SupplyPing) Tj T* ET
+.541176 .521569 .482353 rg
+BT /F1 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 83.52 743.04 Tm (QR Code Placement Guide) Tj T* ET
+.917647 .345098 .047059 rg
+BT /F2 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 496.422 748.8 Tm (supplyping.com) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 20 Tf 24 TL ET
+BT 1 0 0 1 50.4 687.6 Tm (Mounting & printing) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 10 Tf 12 TL ET
+BT 1 0 0 1 50.4 663.84 Tm (Height) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 652.32 Tm (Eye level \227 about 5 feet \(150 cm\) from the floor. Not on the floor, not above a door frame.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 10 Tf 12 TL ET
+BT 1 0 0 1 50.4 632.12 Tm (Surface) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 620.6 Tm (Wall, post, or column. Avoid places carts and forklifts will scuff. Clean and dry the surface first.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 10 Tf 12 TL ET
+BT 1 0 0 1 50.4 600.4 Tm (Material) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 588.88 Tm (Adhesive vinyl or laminated. Plain paper fails within a month in any working facility. Use UV-resistant stock outdoors or) Tj T* ET
+BT 1 0 0 1 50.4 575.88 Tm (near heat.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 10 Tf 12 TL ET
+BT 1 0 0 1 50.4 555.68 Tm (Size) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 544.16 Tm (The code itself at least 2 x 2 inches. A phone should scan it from 2-3 feet without the person crouching.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 10 Tf 12 TL ET
+BT 1 0 0 1 50.4 523.96 Tm (Label) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 512.44 Tm (Always print the location name on the sticker. It tells a manager which code is which, and makes stale codes easy to) Tj T* ET
+BT 1 0 0 1 50.4 499.44 Tm (spot.) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 10 Tf 12 TL ET
+BT 1 0 0 1 50.4 479.24 Tm (Lighting) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 467.72 Tm (If the spot is dim, move the code \227 not the expectation. Phones struggle in low light.) Tj T* ET
+.086275 .639216 .290196 rg
+BT /F2 8 Tf 9.6 TL ET
+BT 1 0 0 1 50.4 440.32 Tm (START WITH ONE AREA) Tj T* ET
+.941176 .992157 .956863 rg
+.733333 .968627 .815686 RG
+n
+58.4 357.52 m
+553.6 357.52 l
+558.0224 357.52 561.6 361.0976 561.6 365.52 c
+561.6 417.92 l
+561.6 422.3424 558.0224 425.92 553.6 425.92 c
+58.4 425.92 l
+53.9776 425.92 50.4 422.3424 50.4 417.92 c
+50.4 365.52 l
+50.4 361.0976 53.9776 357.52 58.4 357.52 c
+h
+B*
+.101961 .094118 .078431 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 63.36 410.08 Tm (For your first two weeks, place 8-12 codes in ONE area rather than 60 across the site.) Tj T* ET
+BT 1 0 0 1 63.36 398.56 Tm (A single well-covered zone tells you more than a thin spread across the whole building:) Tj T* ET
+BT 1 0 0 1 63.36 387.04 Tm (you will see real patterns instead of scattered one-offs, and you can adjust placement) Tj T* ET
+BT 1 0 0 1 63.36 375.52 Tm (before committing to a full rollout.) Tj T* ET
+.917647 .345098 .047059 rg
+BT /F2 8 Tf 9.6 TL ET
+BT 1 0 0 1 50.4 339.52 Tm (WALK IT WITH YOUR TEAM FIRST) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9.5 Tf 11.4 TL ET
+BT 1 0 0 1 50.4 325.12 Tm (Before you place anything, walk the building with a shift supervisor or two and ask one question: "Where do problems get) Tj T* ET
+BT 1 0 0 1 50.4 311.62 Tm (noticed most, and who's usually standing there?" Your floor staff already know the answer. A supervisor will normally) Tj T* ET
+BT 1 0 0 1 50.4 298.12 Tm (name six spots in two minutes. It is also worth doing for a second reason: the people who help choose the locations are) Tj T* ET
+BT 1 0 0 1 50.4 284.62 Tm (the ones most likely to actually use the codes.) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F1 7.5 Tf 9 TL ET
+BT 1 0 0 1 50.4 32.4 Tm (SupplyPing \227 QR Code Placement Guide) Tj T* ET
+BT 1 0 0 1 537.8325 32.4 Tm (Page 2) Tj T* ET
+.909804 .898039 .87451 RG
+.5 w
+n 50.4 44.64 m 561.6 44.64 l S
+ 
+
+Q
+
+q
+0.0 0.0 612 792 re
+W
+n
+1 0 0 1 0 0 cm
+BT
+/F1-0 12 Tf
+14.4 TL
+ET
+0.85098 0.835294 0.8 rg
+BT
+/F2-0 8 Tf
+9.6 TL
+ET
+BT
+1 0 0 1 511.792 737.64 Tm
+(833\055917\0555833) Tj
+T*
+ET
+Q
+
+
+endstream
 endobj
 13 0 obj
 <<
-/Filter [ /ASCII85Decode /FlateDecode ] /Length 1976
+/Contents 14 0 R
+/MediaBox [ 0 0 612 792 ]
+/Resources <<
+/Font <<
+/F1 6 0 R
+/F1-0 7 0 R
+/F2 8 0 R
+/F2-0 9 0 R
+/F3 10 0 R
+>>
+/ProcSet [ /ImageB /ImageC /ImageI /PDF /Text ]
+>>
+/Rotate 0
+/Trans <<
+>>
+/Type /Page
+/Annots [ ]
+/Parent 2 0 R
+>>
+endobj
+14 0 obj
+<<
+/Length 4610
 >>
 stream
-GauHKgMYe)&:N/3bZidDAOVKPUo2($*&g-gG4"ZaOS1ukdU(J8/0qbFpZm0NdB;j2Q6I^cY;E%7B4a,E391e6O1X;T+aUhtTAOYJJsI4k-'P_65_mO=nX/L.'8pqRH%ot#ab3TB)7<S8MM,]l=JdmUkm^q2N*)YY-$*P+cEp.4<-V!iRRh.?Qcb\89hhE^-?io>V(kX5m50nOITA.1MOg^5>T!]BV+fO<?ICQ,ghN35klfH9`k@_T"=M]]8m%Tdj\Ai2Rjmlj"2HB6Gjp$BJn7"ihX7q8A[IJ69HK4h$b[[S\BlbEdt]")4R<[pAsibQfU.DB3'6quQ@I<QV>Ut[7^k3'V^_LH:R3[</!XX;HTfuM9mq(\[?i[t9YnYH'>ER#@io8/&s_epTSIfK(m0(L6m<u7f\]Hg9t)m";AZ0D9KU\MFgWuG`#O"7R?C)Uk;G@VNE&16ktsj:,N-FJAh8"bKC`j\^KB/HF/12X6,XO0aEr*Hm^^V@(1K4'jd#)0/oJ8dnJa0lFi1g9mbM`8K7(mjr/OHdqI28aS=W?+EhKG/EG]C(J$^\[om'X2X&jJA[:\*YL0u"OeWk\b%?-TT[dEpV>uR8;IiG<,C7Vp)Pr1J*hO:;Y8(/"@LHoQlX)W"L=5tgbQu5hA>'94jOfmDU9A=StVd9dRdIh;s+mhUJ%*NI%iJHBO24YdWT+air"RmnX<c12Y83uTsYaM-%0dWg'1ijF\p0[3Ms.QAY-V(P;.cOP\i!E@?Od,A]e.<=W2Oao4Kd9LE*5q!sh/F67606Q>#We9q;T5Fsa'O=UVq9A5#,.'e7]u.a\/%.Hp,shE+p\4X%YD0&;@lNmq.-JeoqPLH6_L5J/K]QelpD<gS>X`'KFfQnLB$]R"BZatadu'i0QlMV@,'6_nm_aN.4d4Ke*/Jh$<N'Ur,j"eP\88rY>T7Pa4@mX<7%N2c>1o,nkBPd0ImOU),:_#-ipLD5]7,Jo]tK#i@U"]4%Bl2<)(08ao=mtaf1rCX!](W5mK2Okd3Kkr%Gp>lj77B,]Y:;Q@qmHjjjIMSL_g1>V,4J)(Ul,S.;Sqa1n704Tpf&*o?SS3<tGgP3&rD8W%c@fi2h=>W3ql$i[38>as]aLPeGdJnE(N&@X3$GNX=,8MHasMA"m.b?^W%*5=L9^->rNio&kU1FR<f-sO(V^&pgBQG)6MbZXA=%(g'B[O\O0-VugT98CJ?d]",(^?_5%n9&Z,X80Os21XbuR%*eg&3/2:ID%<&'>Xg,0-\m/T:B2FNf))9&Y=,h=g^5mMCY3@4JorZ?+V$-o="IAZ+[q5bXJ0cU$^'ql9snaST=bqW@eI'WXAoha+Fm%4tZVLCql`+]@K_#;dJu9)Y#1r-M;MJhmYTo3oO)NSN5rCVDg"d^R99d+Y+W%\"58sH+`d3*O$_^_-6*Q:7eT"D+j(DO=5POV*[OYl5M4qn[bZ5W;\Nc2j'a;'rV/DNqNb0f2[`F.M/3bD+i9Zkb>*CT?p>=g7Iq3G"l-$D>%g9.e?aRbH+'%pcQ#,\h:nn(s:]fGiD8hM<sc/-P<flbf3!95#>X94,l*IeWXZb'q)\33&.aP=$9,8keq5gX$ZEI;#kY*AMCt-mY6q'kqqYY\\/b+3J;@h$0^?&ZSu`!&e(CX\SF8n/LFo(F+8PhoALonJ3$6&X+L.14un&+=MA,^dC\F;qKT7>[,]-3DecYOL=AE!O'=t=B]qC`WUIu=XLe*?RA*ru4r9dV5W8:SPhC5J/pbm=lcF@a2nQh[%Tr-GC!i5*)rGg70[pjI7QNjk"3u9[2C#,*!t>CMV9'GonoRo[0$Qo<A.S+_8(".C_+!1I!ZaC2Sb5EgHFRRF@<RJEJh\%^=uXfn0cOcu\EsiniPldpo3m@9V8:*VHMlrfO3>4I8qsr!5CK/oX%H:I>j^%3'UOQ;>BPt="hCiGNs,45/="@`*;mLdRj23'dtAq<;N6#/7K3G2P4T.~>endstream
+q
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+.101961 .094118 .078431 rg
+n 0 723.6 612 68.4 re f*
+.972549 .968627 .956863 rg
+n
+56.4 740.16 m
+67.44 740.16 l
+70.7568 740.16 73.44 742.8432 73.44 746.16 c
+73.44 757.2 l
+73.44 760.5168 70.7568 763.2 67.44 763.2 c
+56.4 763.2 l
+53.0832 763.2 50.4 760.5168 50.4 757.2 c
+50.4 746.16 l
+50.4 742.8432 53.0832 740.16 56.4 740.16 c
+h
+f*
+.101961 .094118 .078431 rg
+BT /F2 13 Tf 15.6 TL ET
+BT 1 0 0 1 56.88 746.64 Tm (SP) Tj T* ET
+1 1 1 rg
+BT /F2 15 Tf 18 TL ET
+BT 1 0 0 1 83.52 754.56 Tm (SupplyPing) Tj T* ET
+.541176 .521569 .482353 rg
+BT /F1 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 83.52 743.04 Tm (QR Code Placement Guide) Tj T* ET
+.917647 .345098 .047059 rg
+BT /F2 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 496.422 748.8 Tm (supplyping.com) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F2 20 Tf 24 TL ET
+BT 1 0 0 1 50.4 687.6 Tm (Sticker layout) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F1 10.5 Tf 12.6 TL ET
+BT 1 0 0 1 50.4 663.84 Tm (Generate your codes in the SupplyPing dashboard, then lay them out like this. The wording above the code) Tj T* ET
+BT 1 0 0 1 50.4 648.84 Tm (matters \227 without it, people don't know what it's for.) Tj T* ET
+.607843 .588235 .564706 RG
+[3 3] 0 d
+.8 w
+n 156 242.64 300 372 re S
+[] 0 d
+1 1 1 rg
+.101961 .094118 .078431 RG
+1.5 w
+n
+172 248.64 m
+440 248.64 l
+445.528 248.64 450 253.112 450 258.64 c
+450 598.64 l
+450 604.168 445.528 608.64 440 608.64 c
+172 608.64 l
+166.472 608.64 162 604.168 162 598.64 c
+162 258.64 l
+162 253.112 166.472 248.64 172 248.64 c
+h
+B*
+.101961 .094118 .078431 rg
+n
+172 543.84 m
+440 543.84 l
+445.528 543.84 450 548.312 450 553.84 c
+450 598.64 l
+450 604.168 445.528 608.64 440 608.64 c
+172 608.64 l
+166.472 608.64 162 604.168 162 598.64 c
+162 553.84 l
+162 548.312 166.472 543.84 172 543.84 c
+h
+f*
+n 162 543.84 288 28.8 re f*
+1 1 1 rg
+BT /F2 25 Tf 30 TL ET
+BT 1 0 0 1 212.9125 571.2 Tm (See a problem?) Tj T* ET
+.917647 .345098 .047059 rg
+BT /F2 15 Tf 18 TL ET
+BT 1 0 0 1 261.8325 552.48 Tm (SCAN HERE) Tj T* ET
+.945098 .937255 .917647 rg
+.607843 .588235 .564706 RG
+[4 3] 0 d
+1 w
+n 223.2 345.84 165.6 165.6 re B*
+[] 0 d
+.419608 .4 .376471 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 246.105 434.64 Tm (YOUR QR CODE HERE) Tj T* ET
+BT /F1 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 264.9067 420.64 Tm (minimum 2 x 2 inches) Tj T* ET
+.945098 .937255 .917647 rg
+.607843 .588235 .564706 RG
+[4 3] 0 d
+1 w
+n 198 314.88 216 24.48 re B*
+[] 0 d
+.419608 .4 .376471 rg
+BT /F2 11 Tf 13.2 TL ET
+BT 1 0 0 1 242.1395 323.52 Tm (YOUR LOCATION NAME) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F1 8 Tf 9.6 TL ET
+BT 1 0 0 1 208.848 301.92 Tm (e.g. Dock 9  \267  East Restroom  \267  Breakroom  \267  Aisle 12) Tj T* ET
+.419608 .4 .376471 rg
+BT /F1 9 Tf 10.8 TL ET
+BT 1 0 0 1 232.2135 286.08 Tm (No app. No login. Takes 10 seconds.) Tj T* ET
+.945098 .937255 .917647 rg
+n
+172 248.64 m
+440 248.64 l
+445.528 248.64 450 253.112 450 258.64 c
+450 263.12 l
+450 268.648 445.528 273.12 440 273.12 c
+172 273.12 l
+166.472 273.12 162 268.648 162 263.12 c
+162 258.64 l
+162 253.112 166.472 248.64 172 248.64 c
+h
+f*
+n 162 258.72 288 14.4 re f*
+.607843 .588235 .564706 rg
+BT /F1 7.5 Tf 9 TL ET
+BT 1 0 0 1 234.9262 258 Tm (Powered by SupplyPing  \267  supplyping.com) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F3 8.5 Tf 10.2 TL ET
+BT 1 0 0 1 135.9277 227.04 Tm (Shown at approximately actual size \227 4 x 5 inches. Dashed lines are cut and fill-in guides.) Tj T* ET
+.937255 .964706 1 rg
+.74902 .858824 .996078 RG
+1 w
+n
+58.4 134.88 m
+553.6 134.88 l
+558.0224 134.88 561.6 138.4576 561.6 142.88 c
+561.6 188.8 l
+561.6 193.2224 558.0224 196.8 553.6 196.8 c
+58.4 196.8 l
+53.9776 196.8 50.4 193.2224 50.4 188.8 c
+50.4 142.88 l
+50.4 138.4576 53.9776 134.88 58.4 134.88 c
+h
+B*
+.145098 .388235 .921569 rg
+BT /F2 9 Tf 10.8 TL ET
+BT 1 0 0 1 63.36 182.4 Tm (PRINTING FOR MANY LOCATIONS) Tj T* ET
+.101961 .094118 .078431 rg
+BT /F1 9 Tf 10.8 TL ET
+BT 1 0 0 1 63.36 168 Tm (One sticker per location, each with its own QR code from your dashboard.) Tj T* ET
+BT 1 0 0 1 63.36 157.2 Tm (Type the location name to match exactly what you entered in SupplyPing \227 that is what) Tj T* ET
+BT 1 0 0 1 63.36 146.4 Tm (appears on your alerts and dashboard, so matching names keep the two easy to read together.) Tj T* ET
+.607843 .588235 .564706 rg
+BT /F1 7.5 Tf 9 TL ET
+BT 1 0 0 1 50.4 32.4 Tm (SupplyPing \227 QR Code Placement Guide) Tj T* ET
+BT 1 0 0 1 537.8325 32.4 Tm (Page 3) Tj T* ET
+.909804 .898039 .87451 RG
+.5 w
+n 50.4 44.64 m 561.6 44.64 l S
+ 
+
+Q
+
+q
+0.0 0.0 612 792 re
+W
+n
+1 0 0 1 0 0 cm
+BT
+/F1-0 12 Tf
+14.4 TL
+ET
+0.85098 0.835294 0.8 rg
+BT
+/F2-0 8 Tf
+9.6 TL
+ET
+BT
+1 0 0 1 511.792 737.64 Tm
+(833\055917\0555833) Tj
+T*
+ET
+Q
+
+
+endstream
 endobj
 xref
-0 14
+0 15
 0000000000 65535 f 
-0000000061 00000 n 
-0000000112 00000 n 
-0000000219 00000 n 
-0000000331 00000 n 
-0000000446 00000 n 
-0000000641 00000 n 
-0000000836 00000 n 
-0000001031 00000 n 
-0000001100 00000 n 
-0000001393 00000 n 
-0000001465 00000 n 
-0000003922 00000 n 
-0000006151 00000 n 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000127 00000 n 
+0000000176 00000 n 
+0000000432 00000 n 
+0000007771 00000 n 
+0000007878 00000 n 
+0000007985 00000 n 
+0000008097 00000 n 
+0000008209 00000 n 
+0000008325 00000 n 
+0000008583 00000 n 
+0000013340 00000 n 
+0000013598 00000 n 
 trailer
 <<
-/ID 
-[<4e6cbb801faa198ea230b0f7d01f2f5f><4e6cbb801faa198ea230b0f7d01f2f5f>]
-% ReportLab generated PDF document -- digest (opensource)
-
-/Info 9 0 R
-/Root 8 0 R
-/Size 14
+/Size 15
+/Root 3 0 R
+/Info 1 0 R
 >>
 startxref
-8219
+18261
 %%EOF
