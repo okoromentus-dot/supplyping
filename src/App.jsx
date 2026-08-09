@@ -1699,7 +1699,7 @@ export default function App() {
             // href null = plain text (nothing to link). tel: uses E.164 so it
             // dials correctly from any country and on desktop handoff apps.
             { icon: "📧", text: "hello@supplyping.com", href: "mailto:hello@supplyping.com" },
-            { icon: "📞", text: "313-591-3484", href: "tel:+13135913484" },
+            { icon: "📞", text: "833-917-5833", href: "tel:+18339175833" },
             { icon: "🌐", text: "supplyping.com", href: "https://supplyping.com" },
             { icon: "📍", text: "Serving facilities nationwide", href: null },
           ].map(t => (
