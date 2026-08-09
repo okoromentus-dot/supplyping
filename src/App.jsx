@@ -16,6 +16,14 @@ const EMAILJS_TEMPLATE = "template_58s7r9h";
 // body prints {{heading}} and {{message}}.
 const EMAILJS_GENERAL_TEMPLATE = "template_xgh05zq";
 const GUIDE_URL = "https://supplyping.com/qr-placement-guide.pdf";
+
+// Stripe price IDs from your Stripe dashboard (Products > pricing).
+// Leave blank until created — the Billing tab shows setup guidance instead
+// of a broken checkout button.
+const STRIPE_PRICES = {
+  starter:  { id: "", label: "Starter",  price: "$49",  per: "/mo", blurb: "1 facility, up to 10 locations" },
+  business: { id: "", label: "Business", price: "$149", per: "/mo", blurb: "Up to 5 facilities, unlimited locations" },
+};
 const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
@@ -410,6 +418,8 @@ async function fetchFacilityBySlug(slug) {
       facility: f["Facility Name"] || f["Business Name"] || "",
       business: f["Business Name"] || "",
       cleaningEmail: f["Cleaning Team Email"] || "",
+      plan: f["Plan"] || "",
+      clientStatus: f["Client Status"] || "",
       rooms: Array.isArray(rooms) ? rooms : [],
     };
   } catch (e) {
@@ -849,7 +859,7 @@ async function sendAccountNotice({ subject, headline, body, toEmail }) {
   try {
     await emailjs.send(EMAILJS_SERVICE, EMAILJS_GENERAL_TEMPLATE, {
       to_email: toEmail, email: toEmail,
-      subject, heading: headline, message: body,
+      subject: subject, heading: headline, message: body,
       time: new Date().toLocaleString(),
     });
     console.log("[AccountNotice] Sent:", subject);
@@ -1047,6 +1057,10 @@ export default function App() {
   const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
+  const [plan, setPlan] = useState("");            // "Paid" | "Trial" | "Past Due" | "Cancelled"
+  const [clientStatus, setClientStatus] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [accountTab, setAccountTab] = useState("profile"); // "profile" | "billing"
   // Dashboard viewer's preferred language. Persisted per browser so a manager
   // who reads Spanish keeps Spanish across sessions. Independent of reportLang
   // (which is the worker's language on the report page).
@@ -1160,6 +1174,8 @@ export default function App() {
       // blank — so the backup was never used and saved emails looked lost.
       const te = mergeTeamEmails(profile?.teamEmails, backup?.teamEmails);
       if (te) setTeamEmails(prev => ({ ...prev, ...te }));
+      if (profile?.plan) setPlan(profile.plan);
+      if (profile?.clientStatus) setClientStatus(profile.clientStatus);
       if (biz) setBizName(biz);
       if (fac) setLocation(fac);
       if (ce) setAlertEmail(ce);
@@ -1287,6 +1303,39 @@ export default function App() {
       <Btn label="Save Routing →" onClick={saveRouting} variant="primary" full />
     </>
   );
+
+  // ── SUBSCRIPTION / ACCESS ──
+  // A paid account is never gated. An unpaid account is only gated once the
+  // trial has actually run out — and even then, only on manager-side tools.
+  const isPaid = ["paid", "active"].includes(String(plan).toLowerCase())
+    || String(clientStatus).toLowerCase() === "active";
+  const trialExpired = !isPaid && trialDaysLeft === 0;
+
+  const startCheckout = async (priceId) => {
+    if (!priceId) {
+      showToast("Billing isn't set up yet — add your Stripe price IDs first.", T.yellow);
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId, email, businessName: bizName, facilityName: location }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        showToast(data.error || "Couldn't start checkout — please try again.", T.red);
+        setCheckoutLoading(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      console.error("[Billing] Checkout failed:", e);
+      showToast("Couldn't reach the billing service. Please try again.", T.red);
+      setCheckoutLoading(false);
+    }
+  };
 
   // Convenience: static dashboard string translators
   const dt = (s) => tr(dashLang, s);
@@ -1646,14 +1695,28 @@ export default function App() {
           </a>
         </div>
         <div style={{ marginTop: 48, paddingTop: 32, borderTop: "1px solid #222", display: "flex", justifyContent: "center", gap: 32, fontSize: 13, color: "#444", flexWrap: "wrap" }}>
-          {[{ icon: "📧", text: "hello@supplyping.com" }, { icon: "📞", text: "313-591-3484" }, { icon: "🌐", text: "supplyping.com" }, { icon: "📍", text: "Serving facilities nationwide" }].map(t => (
-            <span key={t.text} style={{ display: "flex", alignItems: "center", gap: 6 }}>{t.icon} {t.text}</span>
+          {[
+            // href null = plain text (nothing to link). tel: uses E.164 so it
+            // dials correctly from any country and on desktop handoff apps.
+            { icon: "📧", text: "hello@supplyping.com", href: "mailto:hello@supplyping.com" },
+            { icon: "📞", text: "313-591-3484", href: "tel:+13135913484" },
+            { icon: "🌐", text: "supplyping.com", href: "https://supplyping.com" },
+            { icon: "📍", text: "Serving facilities nationwide", href: null },
+          ].map(t => (
+            t.href ? (
+              <a key={t.text} href={t.href}
+                style={{ display: "flex", alignItems: "center", gap: 6, color: "#888", textDecoration: "none" }}>
+                {t.icon} {t.text}
+              </a>
+            ) : (
+              <span key={t.text} style={{ display: "flex", alignItems: "center", gap: 6 }}>{t.icon} {t.text}</span>
+            )
           ))}
         </div>
         <div id="sms-terms" style={{ maxWidth: 720, margin: "32px auto 0", paddingTop: 24, borderTop: "1px solid #1c1c1c", fontSize: 11, color: "#555", lineHeight: 1.7, textAlign: "left" }}>
           <div style={{ fontWeight: 700, color: "#777", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>SMS Alerts — Terms &amp; Consent</div>
           <p style={{ margin: "0 0 8px" }}>SupplyPing sends SMS text alerts to facility operators and cleaning teams who opt in during account setup. By providing a mobile number and checking the consent box, you agree to receive recurring facility-alert text messages from SupplyPing. Message frequency varies based on facility activity. Message and data rates may apply.</p>
-          <p style={{ margin: "0 0 8px" }}>Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at hello@supplyping.com or 313-591-3484. Consent to receive SMS is not a condition of purchase.</p>
+          <p style={{ margin: "0 0 8px" }}>Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at <a href="mailto:hello@supplyping.com" style={{ color: "#888" }}>hello@supplyping.com</a> or <a href="tel:+13135913484" style={{ color: "#888" }}>313-591-3484</a>. Consent to receive SMS is not a condition of purchase.</p>
           <p style={{ margin: 0 }}>We do not sell or share mobile information with third parties for marketing. © 2026 SupplyPing. Serving facilities across the United States.</p>
         </div>
       </div>
@@ -1743,6 +1806,8 @@ export default function App() {
             const rms = (profile?.rooms && profile.rooms.length) ? profile.rooms : backup?.rooms;
             const te = mergeTeamEmails(profile?.teamEmails, backup?.teamEmails);
             if (te) setTeamEmails(prev => ({ ...prev, ...te }));
+            if (profile?.plan) setPlan(profile.plan);
+            if (profile?.clientStatus) setClientStatus(profile.clientStatus);
             if (biz) setBizName(biz);
             if (fac) setLocation(fac);
             if (ce) setAlertEmail(ce);
@@ -2146,6 +2211,20 @@ export default function App() {
             ))}
           </>
         )}
+
+        {/* Paywall — manager tools only. Worker hazard reporting is never
+            gated: a spill must still be reportable if a card expires. */}
+        {trialExpired ? (
+          <Card style={{ marginTop: 20, borderColor: T.redBorder, background: T.redLight }}>
+            <div style={{ fontSize: 11, color: T.red, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>⏰ Trial Expired</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Your 14-day trial has ended</div>
+            <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 14px", lineHeight: 1.55 }}>
+              Your team can still scan and report, and alerts still reach your inbox — nothing safety-related was switched off.
+              Upgrade to restore your live dashboard, performance reports, and QR code generation.
+            </p>
+            <Btn label="See plans →" onClick={() => { setAccountTab("billing"); nav("account"); }} variant="primary" full />
+          </Card>
+        ) : null}
 
         {queuedCount > 0 && (
           <Card style={{ marginTop: 28, borderColor: "#FDE68A", background: T.yellowLight }}>
@@ -2843,6 +2922,79 @@ export default function App() {
       </header>
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "32px 24px" }}>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+          {[["profile", "👤 Profile"], ["billing", "💳 Billing"]].map(([id, label]) => (
+            <button key={id} type="button" onClick={() => setAccountTab(id)}
+              style={{ flex: 1, padding: "11px 0", borderRadius: 100, cursor: "pointer", fontFamily: font.body, fontSize: 13, fontWeight: 700,
+                border: `1.5px solid ${accountTab === id ? T.ink : T.border}`,
+                background: accountTab === id ? T.ink : T.white,
+                color: accountTab === id ? T.white : T.muted }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {accountTab === "billing" ? (
+          <>
+            {/* Status banner */}
+            <Card style={{ marginBottom: 20, borderColor: isPaid ? T.greenBorder : trialExpired ? T.redBorder : "#FDE68A", background: isPaid ? T.greenLight : trialExpired ? T.redLight : T.yellowLight }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6, color: isPaid ? T.green : trialExpired ? T.red : T.yellow }}>
+                {isPaid ? "✓ Active Subscription" : trialExpired ? "⏰ Trial Expired" : "🎉 Free Trial"}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4 }}>
+                {isPaid
+                  ? `${plan || "Paid"} plan — thank you`
+                  : trialExpired
+                  ? "Your 14-day trial has ended"
+                  : trialDaysLeft === null
+                  ? "Checking your trial…"
+                  : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`}
+              </div>
+              <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
+                {isPaid
+                  ? "Your subscription is active. Everything stays on, and your reports keep running as normal."
+                  : trialExpired
+                  ? "Your team can still report issues and alerts still go out — nothing safety-related is switched off. Upgrade to restore your dashboard, reports, and QR generation."
+                  : "Full access during your trial. Upgrade any time — nothing is lost when you do."}
+              </div>
+            </Card>
+
+            {/* Plans */}
+            {!isPaid ? (
+              <>
+                {Object.entries(STRIPE_PRICES).map(([key, p]) => (
+                  <Card key={key} style={{ marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                      <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 800 }}>{p.label}</div>
+                      <div style={{ fontFamily: font.display, fontSize: 22, fontWeight: 800, color: T.ink }}>
+                        {p.price}<span style={{ fontSize: 13, color: T.muted, fontWeight: 500 }}>{p.per}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 14, lineHeight: 1.5 }}>{p.blurb}</div>
+                    <Btn label={checkoutLoading ? "Opening checkout…" : "Upgrade Now →"}
+                      onClick={() => startCheckout(p.id)}
+                      disabled={checkoutLoading}
+                      variant="primary" full />
+                  </Card>
+                ))}
+                <div style={{ fontSize: 11.5, color: T.dim, textAlign: "center", lineHeight: 1.6, marginTop: 4 }}>
+                  Secure checkout by Stripe. Cancel any time.<br />
+                  Questions? Reply to any SupplyPing email — a real person reads them.
+                </div>
+              </>
+            ) : (
+              <Card>
+                <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>Manage Subscription</div>
+                <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 14px", lineHeight: 1.55 }}>
+                  To update your card, change plan, or cancel, email hello@supplyping.com and we'll sort it same day.
+                </p>
+                <Btn label="Email Support" onClick={() => { window.location.href = "mailto:hello@supplyping.com?subject=Subscription%20request"; }} variant="outline" full />
+              </Card>
+            )}
+          </>
+        ) : (
+        <>
         <Card style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>Change Email</div>
           <p style={{ fontSize: 12, color: T.muted, margin: "0 0 16px", lineHeight: 1.5 }}>Your login email is <b>{email}</b>. Enter a new email below — you may need to confirm the change via a link sent to your inbox.</p>
@@ -2884,6 +3036,8 @@ export default function App() {
             showToast("✅ Password updated!", T.green);
           }} disabled={!newPassword || !confirmPassword || acctLoading} variant="primary" full />
         </Card>
+        </>
+        )}
       </div>
     </div>
   );
@@ -2948,7 +3102,7 @@ export default function App() {
               <h3 style={{ color: T.ink }}>4. Pilot Program</h3>
               <p>Founding pilot accounts receive the service free for 14 days. After the pilot, continued use is subject to the then-current published pricing. Either party may discontinue at any time.</p>
               <h3 style={{ color: T.ink }}>5. Contact</h3>
-              <p>Questions: hello@supplyping.com · 313-591-3484</p>
+              <p>Questions: <a href="mailto:hello@supplyping.com" style={{ color: T.orange }}>hello@supplyping.com</a> · <a href="tel:+13135913484" style={{ color: T.orange }}>313-591-3484</a></p>
             </>
           ) : (
             <>
@@ -2971,6 +3125,24 @@ export default function App() {
 
   // ── PERFORMANCE REPORT (client-facing, printable) ──
   if (screen === "performance") {
+    if (trialExpired) {
+      return (
+        <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          {toast && <Toast msg={toast.msg} color={toast.color} />}
+          <Card style={{ maxWidth: 420, textAlign: "center", padding: "34px 26px" }}>
+            <div style={{ fontSize: 34, marginBottom: 12 }}>📊</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 21, fontWeight: 700, margin: "0 0 8px" }}>Reports need an active plan</h2>
+            <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: "0 0 18px" }}>
+              Your trial has ended. Your reporting data is safe and still being collected — upgrade to generate client-ready reports again.
+            </p>
+            <Btn label="See plans →" onClick={() => { setAccountTab("billing"); nav("account"); }} variant="primary" full />
+            <div style={{ marginTop: 10 }}>
+              <Btn label="← Dashboard" onClick={() => nav("dashboard")} variant="outline" full />
+            </div>
+          </Card>
+        </div>
+      );
+    }
     const rep = buildPerformanceReport(alerts, reportDays);
     const rangeLabel = reportDays === 0 ? "All time" : `Last ${reportDays} days`;
     const stat = (label, value, color, sub) => (
