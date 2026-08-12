@@ -2193,18 +2193,33 @@ export default function App() {
         >
           {LANGS.map(l => <option key={l.id} value={l.id}>🌐 {l.label}</option>)}
         </select>
-        {trialDaysLeft !== null && (
+        {trialDaysLeft !== null && !isPaid && (
+          // Clickable: the badge previously said "contact us to continue" but
+          // was a static div with no contact method and nothing to tap. It now
+          // opens the Billing tab directly. The dt() keys are unchanged so the
+          // six existing translations keep working.
+          <button type="button"
+            onClick={() => { setAccountTab("billing"); nav("account"); }}
+            style={{
+              fontFamily: font.body, cursor: "pointer",
+              fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 100,
+              background: trialDaysLeft === 0 ? T.redLight : trialDaysLeft <= 3 ? T.yellowLight : T.greenLight,
+              color: trialDaysLeft === 0 ? T.red : trialDaysLeft <= 3 ? T.yellow : T.green,
+              border: `1px solid ${trialDaysLeft === 0 ? T.redBorder : trialDaysLeft <= 3 ? "#FDE68A" : T.greenBorder}`,
+            }}>
+            {trialDaysLeft === 0
+              ? `⏰ ${dt("Trial ended — contact us to continue")} →`
+              : trialDaysLeft === 1
+              ? `⏰ ${dt("Last day of your free trial")} →`
+              : `🎉 ${trialDaysLeft} ${dt("days left in your free trial")} →`}
+          </button>
+        )}
+        {isPaid && (
           <div style={{
             fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 100,
-            background: trialDaysLeft === 0 ? T.redLight : trialDaysLeft <= 3 ? T.yellowLight : T.greenLight,
-            color: trialDaysLeft === 0 ? T.red : trialDaysLeft <= 3 ? T.yellow : T.green,
-            border: `1px solid ${trialDaysLeft === 0 ? T.redBorder : trialDaysLeft <= 3 ? "#FDE68A" : T.greenBorder}`,
+            background: T.greenLight, color: T.green, border: `1px solid ${T.greenBorder}`,
           }}>
-            {trialDaysLeft === 0
-              ? `⏰ ${dt("Trial ended — contact us to continue")}`
-              : trialDaysLeft === 1
-              ? `⏰ ${dt("Last day of your free trial")}`
-              : `🎉 ${trialDaysLeft} ${dt("days left in your free trial")}`}
+            ✓ {plan || "Active"}
           </div>
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 0" }}>
