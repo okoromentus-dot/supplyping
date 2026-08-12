@@ -378,6 +378,27 @@ const AREA_TYPES = [
   { id: "supply", label: "📦 Restroom / Supplies" },
 ];
 
+// Sends an SMS alert via the /api/send-sms endpoint. Fails soft — if SMS
+// isn't configured yet, or a number is missing, email is still the primary
+// channel and nothing blocks on this.
+async function sendSmsAlert(recipients, message) {
+  const nums = (recipients || []).filter(Boolean);
+  if (nums.length === 0) return { sent: false, skipped: true };
+  try {
+    const res = await fetch("/api/send-sms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipients: nums, message }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) console.error("[SMS] Send failed:", data.error);
+    return data;
+  } catch (e) {
+    console.error("[SMS] Request error:", e);
+    return { sent: false, error: true };
+  }
+}
+
 // ── FACILITY FALLBACK (/f/{slug}) ────────────────────────────────
 // A backup entry point for when a QR code is damaged, missing, or a worker
 // is between zones. It loads that facility's saved areas so the report still
@@ -922,8 +943,15 @@ async function fetchTeamRouting(primaryEmail, facilityName) {
       maint: f["Maintenance Team Email"] || "",
       supply: f["Supplies Team Email"] || "",
     };
+    const foundPhones = {
+      safety: f["Safety Team Phone"] || "",
+      security: f["Security Team Phone"] || "",
+      maint: f["Maintenance Team Phone"] || "",
+      supply: f["Supplies Team Phone"] || "",
+    };
+    const smsOn = String(f["SMS Enabled"] || "").toLowerCase() === "yes";
     console.log(`[Routing] Matched Clients row (Email="${f["Email"] || ""}") — team addresses on file:`, JSON.stringify(found));
-    return found;
+    return { ...found, _phones: foundPhones, _smsEnabled: smsOn, _primaryPhone: f["Phone Number"] || "" };
   } catch (e) {
     console.error("[Routing] Lookup failed:", e);
     return null;
@@ -1054,6 +1082,11 @@ export default function App() {
   const [alertEmail, setAlertEmail] = useState("");
   // Optional per-team addresses. Blank means "use the primary alert email".
   const [teamEmails, setTeamEmails] = useState({ safety: "", security: "", maint: "", supply: "" });
+  // SMS is opt-in and additive to email — a team with no phone just gets
+  // email, same as today. Parallel structure to teamEmails rather than
+  // merged, so the email routing logic already in production is untouched.
+  const [teamPhones, setTeamPhones] = useState({ safety: "", security: "", maint: "", supply: "" });
+  const [smsEnabled, setSmsEnabled] = useState(false);
   const [showTeamRouting, setShowTeamRouting] = useState(false);
   const [alertPhone, setAlertPhone] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
@@ -1197,6 +1230,9 @@ export default function App() {
       if (te) setTeamEmails(prev => ({ ...prev, ...te }));
       if (profile?.plan) setPlan(profile.plan);
       if (profile?.clientStatus) setClientStatus(profile.clientStatus);
+      const tp2 = profile?.teamPhones;
+      if (tp2) setTeamPhones(prev => ({ ...prev, ...tp2 }));
+      if (profile?.smsEnabled) setSmsEnabled(true);
       if (biz) setBizName(biz);
       if (fac) setLocation(fac);
       if (ce) setAlertEmail(ce);
@@ -1251,21 +1287,27 @@ export default function App() {
   // Alert routing editor — one definition used on both the Dashboard and the
   // Manage screen so the two can never drift apart.
   const saveRouting = async () => {
-    // Always send every team field — including empty ones. Previously a blank
-    // field was omitted from the patch, which meant clearing an address in the
-    // UI left the old value in Airtable and routing never actually changed.
+    // Always send every field — including empty ones. A blank field omitted
+    // from the patch would leave the old value in Airtable, so routing never
+    // actually changes when someone clears it.
     const extra = {
       "Facility Name": location,
       "Cleaning Team Email": alertEmail,
+      "Phone Number": alertPhone,
       "Safety Team Email": teamEmails.safety || "",
       "Security Team Email": teamEmails.security || "",
       "Maintenance Team Email": teamEmails.maint || "",
       "Supplies Team Email": teamEmails.supply || "",
+      "Safety Team Phone": teamPhones.safety || "",
+      "Security Team Phone": teamPhones.security || "",
+      "Maintenance Team Phone": teamPhones.maint || "",
+      "Supplies Team Phone": teamPhones.supply || "",
+      "SMS Enabled": smsEnabled ? "Yes" : "No",
     };
     const res = await saveLocationsToAirtable(email, rooms, extra);
     // Always keep a local copy so the setting survives on this device even if
     // the Airtable columns aren't there yet.
-    saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails });
+    saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails, teamPhones, smsEnabled });
     const dropped = (res && res.dropped) || [];
     const teamDropped = dropped.filter(d => /Team Email$/.test(d));
     if (!res || !res.ok) {
@@ -1298,6 +1340,22 @@ export default function App() {
         Reports route by what's reported, not by which QR code is scanned — so your printed codes never need reprinting. Leave a team blank to send its reports to the primary address.
       </p>
       <Input label="Primary Alert Email (fallback for all teams)" value={alertEmail} onChange={setAlertEmail} placeholder="ops@yourbusiness.com" type="email" />
+      <Input label="Primary Alert Phone (optional, for SMS)" value={alertPhone} onChange={setAlertPhone} placeholder="+1 313 000 0000" />
+
+      {/* SMS master toggle — off by default. Turning it on doesn't remove
+          email; SMS is additive, so nobody loses their existing alerts by
+          trying this. */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: T.cream, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>📱 Also send SMS alerts</div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>Email keeps sending either way. SMS adds a text on top.</div>
+        </div>
+        <button type="button" onClick={() => setSmsEnabled(v => !v)}
+          style={{ width: 46, height: 26, borderRadius: 100, border: "none", cursor: "pointer", background: smsEnabled ? T.green : T.border, position: "relative", flexShrink: 0, transition: "background .2s" }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.white, position: "absolute", top: 3, left: smsEnabled ? 23 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+        </button>
+      </div>
+
       {TEAM_FIELDS.map(([key, label, ph]) => (
         <div key={key} style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1316,6 +1374,12 @@ export default function App() {
             onChange={(e) => setTeamEmails(prev => ({ ...prev, [key]: e.target.value }))}
             placeholder={ph} type="email"
             style={{ width: "100%", border: `1.5px solid ${teamEmails[key] ? T.green : T.border}`, borderRadius: 10, padding: "12px 14px", fontFamily: font.body, fontSize: 14, color: T.ink, background: T.cream, boxSizing: "border-box", outline: "none" }} />
+          {smsEnabled && (
+            <input value={teamPhones[key]}
+              onChange={(e) => setTeamPhones(prev => ({ ...prev, [key]: e.target.value }))}
+              placeholder="+1 313 000 0000 (optional SMS number)" type="tel"
+              style={{ width: "100%", marginTop: 6, border: `1.5px solid ${teamPhones[key] ? T.green : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: font.body, fontSize: 13, color: T.ink, background: T.white, boxSizing: "border-box", outline: "none" }} />
+          )}
         </div>
       ))}
       <div style={{ fontSize: 11.5, color: T.dim, lineHeight: 1.5, marginBottom: 14 }}>
@@ -1829,6 +1893,9 @@ export default function App() {
             if (te) setTeamEmails(prev => ({ ...prev, ...te }));
             if (profile?.plan) setPlan(profile.plan);
             if (profile?.clientStatus) setClientStatus(profile.clientStatus);
+            const tp = profile?.teamPhones;
+            if (tp) setTeamPhones(prev => ({ ...prev, ...tp }));
+            if (profile?.smsEnabled) setSmsEnabled(true);
             if (biz) setBizName(biz);
             if (fac) setLocation(fac);
             if (ce) setAlertEmail(ce);
@@ -2863,6 +2930,21 @@ export default function App() {
               }
               const routed = routeRecipients(reportIssues, { ...activeTeams, clean: cleaningEmail }, cleaningEmail);
               const notifiedTeams = teamsForItems(reportIssues);
+
+              // SMS — additive to email, never a replacement. Uses session
+              // state when the reporter is logged in (rare — most reports are
+              // anonymous QR scans), otherwise the values the Airtable lookup
+              // just returned for this facility.
+              const activeSmsOn = hasStateRouting ? smsEnabled : !!(activeTeams && activeTeams._smsEnabled);
+              const activePhones = hasStateRouting ? teamPhones : ((activeTeams && activeTeams._phones) || {});
+              const activePrimaryPhone = hasStateRouting ? alertPhone : ((activeTeams && activeTeams._primaryPhone) || "");
+              if (activeSmsOn) {
+                const smsRecipients = routeRecipients(reportIssues, { ...activePhones, clean: activePrimaryPhone }, activePrimaryPhone);
+                if (smsRecipients.length) {
+                  const smsIssue = (reportIssues[0] || "issue").replace(/^.{0,2}\s*/, ""); // drop leading emoji for SMS
+                  sendSmsAlert(smsRecipients, `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`);
+                }
+              }
               const recipients = [...routed, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
               console.log("[Routing] issues:", reportIssues,
                 "| teams:", JSON.stringify(activeTeams),
