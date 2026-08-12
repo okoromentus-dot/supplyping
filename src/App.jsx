@@ -608,18 +608,39 @@ function teamsForItems(itemIds) {
   return Array.from(out);
 }
 
+// Builds the report URL used by BOTH printed QR codes and NFC tag writes.
+// One builder for both keeps a scanned tap and a scanned code producing
+// byte-identical reports — divergence here would show up as mismatched
+// location names on the dashboard, which is exactly the class of bug that
+// caused "Unlisted Location" reports before.
+//
+// Every value is trimmed and whitespace-collapsed. Untrimmed names were
+// producing links like `l=Warehouse+` (trailing space), which survived into
+// alerts and made dashboard matching fragile.
 const buildFormUrl = (cleaningEmail, locationName, roomName, stallNum, bizNameVal, categoryVal) => {
   const base = "https://supplyping.com/r";
+  const clean = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
   const params = new URLSearchParams();
-  if (cleaningEmail) params.set("ce", cleaningEmail);
-  if (locationName) params.set("l", locationName);
-  if (roomName) params.set("r", roomName);
-  if (stallNum) params.set("s", stallNum);
-  if (bizNameVal) params.set("b", bizNameVal);
-  if (categoryVal && categoryVal !== "default") params.set("category", categoryVal);
+  const ce = clean(cleaningEmail).toLowerCase();
+  const l = clean(locationName);
+  const r = clean(roomName);
+  const s = clean(stallNum);
+  const b = clean(bizNameVal);
+  const cat = clean(categoryVal);
+  if (ce) params.set("ce", ce);
+  if (l) params.set("l", l);
+  if (r) params.set("r", r);
+  if (s) params.set("s", s);
+  if (b) params.set("b", b);
+  if (cat && cat !== "default") params.set("category", cat);
   const query = params.toString();
   return query ? `${base}?${query}` : base;
 };
+
+// NFC tags store the same URL. Kept as a named helper so the intent is
+// explicit at call sites and so any future NFC-specific parameter (e.g. a
+// scan_method flag) has one place to live.
+const buildNfcUrl = (...args) => buildFormUrl(...args);
 
 const qr = (url, size = 130) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1A1814&bgcolor=F8F7F4&margin=8`;
@@ -2376,14 +2397,77 @@ export default function App() {
                       link.click();
                       showToast("📥 Downloaded!", T.green);
                     }} style={{ marginTop: 8, background: T.ink, color: T.white, border: "none", borderRadius: 7, padding: "5px 10px", fontFamily: font.body, fontSize: 10, fontWeight: 600, cursor: "pointer", width: "100%" }}>
-                      ⬇️ Download
+                      ⬇️ QR
                     </button>
+
+                    {/* NFC: the same URL, written to a tag. Copy works on any
+                        device (paste into NFC Tools); direct write only where
+                        Web NFC exists, which is Chrome on Android. */}
+                    <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
+                      <button onClick={() => {
+                        const nfcUrl = buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
+                        try {
+                          navigator.clipboard.writeText(nfcUrl);
+                          showToast("📋 Tag URL copied — paste into NFC Tools", T.green);
+                        } catch (e) { showToast(nfcUrl, T.blue); }
+                      }} style={{ flex: 1, background: T.white, color: T.ink, border: `1.5px solid ${T.border}`, borderRadius: 7, padding: "5px 6px", fontFamily: font.body, fontSize: 9.5, fontWeight: 700, cursor: "pointer" }}>
+                        📋 Copy
+                      </button>
+                      {typeof window !== "undefined" && "NDEFReader" in window ? (
+                        <button onClick={async () => {
+                          const nfcUrl = buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
+                          try {
+                            showToast("📡 Hold a tag to your phone…", T.blue);
+                            const writer = new window.NDEFReader();
+                            await writer.write({ records: [{ recordType: "url", data: nfcUrl }] });
+                            showToast("✅ Tag written for " + room.name, T.green);
+                          } catch (e) {
+                            console.error("[NFC] write failed:", e);
+                            showToast("Couldn't write the tag — use Copy + NFC Tools instead.", T.yellow);
+                          }
+                        }} style={{ flex: 1, background: T.orangeLight, color: T.orange, border: `1.5px solid #FED7AA`, borderRadius: 7, padding: "5px 6px", fontFamily: font.body, fontSize: 9.5, fontWeight: 700, cursor: "pointer" }}>
+                          📡 Write
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}
             </div>
           </Card>
         ))}
+
+        {/* Bulk export — the practical path for programming many tags at once */}
+        <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>📡 NFC Tags</div>
+          <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 12px", lineHeight: 1.55 }}>
+            NFC tags use the same links as your QR codes — tap instead of scan, useful for gloved hands or dim areas.
+            Export every link below, then batch-write them with NFC Tools. Or email us and we'll pre-program and mail them ready to stick.
+          </p>
+          <Btn label="⬇️ Export all tag URLs (CSV)" onClick={() => {
+            try {
+              const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+              const lines = [[esc("Location"), esc("Unit"), esc("Tag URL")].join(",")];
+              rooms.forEach(room => {
+                Array.from({ length: room.stalls || 1 }, (_, si) => {
+                  lines.push([
+                    esc(room.name),
+                    esc(room.stalls > 1 ? `Unit ${si + 1}` : ""),
+                    esc(buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category)),
+                  ].join(","));
+                });
+              });
+              const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `SupplyPing-NFC-Tags-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              showToast("📥 Tag URLs exported", T.green);
+            } catch (e) { showToast("Couldn't export — try Copy on each card instead.", T.red); }
+          }} variant="outline" full />
+        </Card>
 
         <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 12, padding: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.green, marginBottom: 10 }}>🖨️ Print & Install Instructions</div>
