@@ -399,6 +399,74 @@ async function sendSmsAlert(recipients, message) {
   }
 }
 
+// ── SUPABASE PROFILE (source of truth for trial + access) ────────
+// public.profiles is provisioned by the on_auth_user_created trigger and is
+// the ONLY authority on trial_ends_at and status. The app previously computed
+// the trial as signup_date + 14 hardcoded days, which meant an admin
+// extending a trial via SQL had no effect in the UI. Reading trial_ends_at
+// makes admin renewals and extensions take effect immediately.
+
+// Status values treated as "paid / full access, no trial countdown".
+const PAID_STATUSES = ["paid", "active_paid", "subscribed", "premium"];
+// Status values that revoke access regardless of trial dates.
+const BLOCKED_STATUSES = ["suspended", "cancelled", "canceled", "disabled", "expired"];
+
+async function fetchProfile(userId) {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, company_name, status, trial_ends_at, created_at")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) {
+      // Most common cause: no RLS SELECT policy on public.profiles.
+      console.error("[Profile] Supabase read failed:", error.message);
+      return null;
+    }
+    if (!data) {
+      console.warn("[Profile] No profiles row for this user — the signup trigger may not have run. Falling back to signup date.");
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.error("[Profile] Fetch error:", e);
+    return null;
+  }
+}
+
+// Turns a profile row into the access state the UI needs. Kept pure so it can
+// be reasoned about and tested without a network call.
+function evaluateAccess(profile, authCreatedAt) {
+  const status = String((profile && profile.status) || "").toLowerCase().trim();
+
+  if (BLOCKED_STATUSES.includes(status)) {
+    return { daysLeft: 0, isPaid: false, blocked: true, status, source: "status" };
+  }
+  if (PAID_STATUSES.includes(status)) {
+    // Paid accounts have no countdown and are never gated.
+    return { daysLeft: null, isPaid: true, blocked: false, status, source: "status" };
+  }
+
+  // Trial: trial_ends_at is authoritative when present.
+  const endsAt = profile && profile.trial_ends_at ? new Date(profile.trial_ends_at) : null;
+  if (endsAt && !isNaN(endsAt.getTime())) {
+    const msLeft = endsAt.getTime() - Date.now();
+    const daysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+    return { daysLeft, isPaid: false, blocked: false, status, source: "trial_ends_at" };
+  }
+
+  // Fallback only when no profile row exists (trigger failure, or an account
+  // created before the trigger was added).
+  if (authCreatedAt) {
+    const signedUp = new Date(authCreatedAt);
+    const elapsed = Math.floor((Date.now() - signedUp.getTime()) / (1000 * 60 * 60 * 24));
+    return { daysLeft: Math.max(0, 14 - elapsed), isPaid: false, blocked: false, status, source: "fallback_signup_date" };
+  }
+
+  return { daysLeft: null, isPaid: false, blocked: false, status, source: "unknown" };
+}
+
 // ── FACILITY FALLBACK (/f/{slug}) ────────────────────────────────
 // A backup entry point for when a QR code is damaged, missing, or a worker
 // is between zones. It loads that facility's saved areas so the report still
@@ -1392,9 +1460,15 @@ export default function App() {
   // ── SUBSCRIPTION / ACCESS ──
   // A paid account is never gated. An unpaid account is only gated once the
   // trial has actually run out — and even then, only on manager-side tools.
-  const isPaid = ["paid", "active"].includes(String(plan).toLowerCase())
-    || String(clientStatus).toLowerCase() === "active";
-  const trialExpired = !isPaid && trialDaysLeft === 0;
+  // "active" is the DEFAULT status for a new trial user in public.profiles —
+  // it means "account in good standing", NOT "paying". Treating it as paid
+  // would let every trial account bypass the paywall permanently, so paid
+  // status is recognised only from explicit paid values or a Stripe plan.
+  const isPaid =
+    PAID_STATUSES.includes(String(plan).toLowerCase().trim()) ||
+    PAID_STATUSES.includes(String(clientStatus).toLowerCase().trim());
+  const isBlocked = BLOCKED_STATUSES.includes(String(clientStatus).toLowerCase().trim());
+  const trialExpired = !isPaid && (isBlocked || trialDaysLeft === 0);
 
   const startCheckout = async (priceId) => {
     if (!priceId) {
@@ -1426,18 +1500,29 @@ export default function App() {
   const dt = (s) => tr(dashLang, s);
   const dtf = (s, vars) => trf(dashLang, s, vars);
 
-  // 14-day trial countdown — based on the account's REAL Supabase signup
-  // timestamp, not a stored guess, so it can't drift or be reset by accident.
+  // Trial + access state, read from public.profiles. trial_ends_at is
+  // authoritative, so extending or renewing a client via SQL takes effect the
+  // next time their dashboard loads — no deploy, no code change.
   useEffect(() => {
     if (screen !== "dashboard") return;
-    supabase.auth.getUser().then(({ data }) => {
-      const createdAt = data?.user?.created_at;
-      if (!createdAt) { setTrialDaysLeft(null); return; }
-      const signedUp = new Date(createdAt);
-      const msPerDay = 1000 * 60 * 60 * 24;
-      const elapsed = Math.floor((Date.now() - signedUp.getTime()) / msPerDay);
-      const left = Math.max(0, 14 - elapsed);
-      setTrialDaysLeft(left);
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data?.user;
+      if (!user) { setTrialDaysLeft(null); return; }
+
+      const profile = await fetchProfile(user.id);
+      const access = evaluateAccess(profile, user.created_at);
+
+      setTrialDaysLeft(access.daysLeft);
+      if (access.isPaid) setPlan("Paid");
+      if (access.blocked) setClientStatus("Blocked");
+      if (profile && profile.company_name && !bizName) setBizName(profile.company_name);
+
+      console.log(
+        `[Access] status="${access.status || "none"}" daysLeft=${access.daysLeft} paid=${access.isPaid} blocked=${access.blocked} source=${access.source}`
+      );
+
+      const left = access.daysLeft;
+      if (left === null) return; // paid accounts get no trial notices
 
       // Notify YOU (management) once per client, at day-3-left and at expiry,
       // so a pilot never silently lapses without a founder follow-up call.
