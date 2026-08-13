@@ -28,8 +28,8 @@ const EMAILJS_PUBLIC_KEY = "sVz8ve1fsqueZatOT";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
 // Build marker — bump when triggering redeploys; visible in browser console.
-const BUILD_VERSION = "2026-07-30-team-routing";
-try { console.log(`[SupplyPing] build ${BUILD_VERSION} — team routing active`); } catch (e) {}
+const BUILD_VERSION = "2026-08-12-supabase-profiles";
+try { console.log(`[SupplyPing] build ${BUILD_VERSION} — Supabase profiles + SMS + NFC`); } catch (e) {}
 
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
