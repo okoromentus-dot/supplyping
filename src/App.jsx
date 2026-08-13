@@ -1460,6 +1460,14 @@ export default function App() {
   // ── SUBSCRIPTION / ACCESS ──
   // A paid account is never gated. An unpaid account is only gated once the
   // trial has actually run out — and even then, only on manager-side tools.
+  // A trial longer than a normal cycle is almost always a manual extension or
+  // a misconfigured trigger. Showing the raw number ("731 days left") looks
+  // broken to a client, so anything beyond this threshold displays as a plain
+  // "Active" state instead. The underlying value is untouched — this is a
+  // presentation guard only, and the real number still logs to the console.
+  const TRIAL_DISPLAY_CAP = 30;
+  const trialLooksExtended = trialDaysLeft !== null && trialDaysLeft > TRIAL_DISPLAY_CAP;
+
   // "active" is the DEFAULT status for a new trial user in public.profiles —
   // it means "account in good standing", NOT "paying". Treating it as paid
   // would let every trial account bypass the paywall permanently, so paid
@@ -2288,12 +2296,14 @@ export default function App() {
             style={{
               fontFamily: font.body, cursor: "pointer",
               fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 100,
-              background: trialDaysLeft === 0 ? T.redLight : trialDaysLeft <= 3 ? T.yellowLight : T.greenLight,
-              color: trialDaysLeft === 0 ? T.red : trialDaysLeft <= 3 ? T.yellow : T.green,
-              border: `1px solid ${trialDaysLeft === 0 ? T.redBorder : trialDaysLeft <= 3 ? "#FDE68A" : T.greenBorder}`,
+              background: trialDaysLeft === 0 ? T.redLight : (!trialLooksExtended && trialDaysLeft <= 3) ? T.yellowLight : T.greenLight,
+              color: trialDaysLeft === 0 ? T.red : (!trialLooksExtended && trialDaysLeft <= 3) ? T.yellow : T.green,
+              border: `1px solid ${trialDaysLeft === 0 ? T.redBorder : (!trialLooksExtended && trialDaysLeft <= 3) ? "#FDE68A" : T.greenBorder}`,
             }}>
             {trialDaysLeft === 0
               ? `⏰ ${dt("Trial ended — contact us to continue")} →`
+              : trialLooksExtended
+              ? "✓ Active"
               : trialDaysLeft === 1
               ? `⏰ ${dt("Last day of your free trial")} →`
               : `🎉 ${trialDaysLeft} ${dt("days left in your free trial")} →`}
@@ -3215,6 +3225,8 @@ export default function App() {
                   ? "Your 14-day trial has ended"
                   : trialDaysLeft === null
                   ? "Checking your trial…"
+                  : trialLooksExtended
+                  ? "Active — extended access"
                   : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`}
               </div>
               <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
