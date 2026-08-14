@@ -1655,16 +1655,16 @@ export default function App() {
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 64px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
-          Free 14-Day Pilot — Built for Warehouses & High-Traffic Facilities
+          Free 14-Day Pilot — Built for Operations & Facilities Teams
         </div>
         <h1 style={{ fontFamily: font.display, fontSize: 56, fontWeight: 700, margin: "0 0 24px", letterSpacing: -2.5, lineHeight: 1.05 }}>
-          See it. Scan it.<br />Solve it. <span style={{ color: T.orange }}>⚠️</span>
+          From noticed<br />to fixed. <span style={{ color: T.orange }}>In minutes.</span>
         </h1>
         <p style={{ fontSize: 18, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
-          Real-time facility reporting for warehouses, plants, and campuses. Workers scan a QR code and photograph the problem — AI identifies the hazard, sets a severity, and drafts the report. The right team is notified instantly, with a timestamp.
+          Every hour a hazard, breakdown, or stock-out goes unreported is downtime you're already paying for. SupplyPing closes the gap between the person who sees the problem and the team that fixes it — automatically routed, timestamped, and logged from report to resolution.
         </p>
         <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 36px", lineHeight: 1.6 }}>
-          AI photo analysis · 6 languages · live dashboard. Set up in 10 minutes — no app, no login for workers, no IT team.
+          Any worker can report in seconds — no app, no login, no training. Deploys across a facility in under an hour, with no IT project and no hardware to install.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="primary" size="lg" />
@@ -1692,7 +1692,7 @@ export default function App() {
               { n: "01", emoji: "✍️", title: "Sign Up Free", desc: "Create your account and select your industry. No credit card needed." },
               { n: "02", emoji: "📍", title: "Add Locations", desc: "Enter your locations and how many units/assets each has." },
               { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post at each unit/asset." },
-              { n: "04", emoji: "🚀", title: "Go Live!", desc: "Workers scan, photograph the issue, and AI drafts the report. The right team is notified instantly." },
+              { n: "04", emoji: "🚀", title: "Go Live", desc: "Problems reach the responsible team in seconds — timestamped, photographed, and tracked to resolution." },
             ].map(s => (
               <Card key={s.n}>
                 <div style={{ fontSize: 11, color: T.orange, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>{s.n}</div>
@@ -1710,22 +1710,22 @@ export default function App() {
       <div style={{ padding: "64px 24px", background: T.cream }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 700 }}>AI Photo Reporting</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 14px", letterSpacing: -1.2 }}>Point the camera. AI writes the report.</h2>
+            <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 700 }}>How the loop closes</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 14px", letterSpacing: -1.2 }}>The reporting gap, closed.</h2>
             <p style={{ fontSize: 15.5, color: T.muted, maxWidth: 660, margin: "0 auto 34px", lineHeight: 1.7 }}>
-              A worker scans the QR code and photographs the hazard. SupplyPing's AI identifies what it is,
-              tags it, assigns a severity, and drafts the description — then the worker confirms and sends.
-              Nothing is filed without a person approving it.
+              Most facility problems are seen long before they're reported — because reporting means finding
+              a supervisor, a radio, or a form. SupplyPing removes that step entirely: a worker reports from
+              exactly where they're standing, and the issue reaches the team that owns it in seconds.
             </p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16 }}>
             {[
-              ["🤖", "AI hazard analysis", "Photograph a spill, blocked exit, or damaged equipment — AI classifies the hazard type and flags immediate risks."],
-              ["⚡", "Severity triage", "High-severity hazards are marked so a wet floor in a forklift lane outranks an empty towel dispenser."],
-              ["👥", "Routed by team", "Safety, security, maintenance, cleaning and supplies each go to the team that owns them."],
-              ["🌐", "Six languages + voice", "Workers report in Spanish, French, Arabic, Bengali, Hindi or Chinese. Supervisors read English."],
-              ["📊", "Live dashboard", "Every report appears in seconds, tracked from reported to resolved with timestamps."],
-              ["📷", "Photo evidence", "Each report keeps its photo and time on record — no more relying on memory at review time."],
+              ["⚡", "Automated alert routing", "Safety, maintenance, security, cleaning and supplies each route to the team that owns them — by email or SMS, with no dispatcher in the middle."],
+              ["⏱️", "Incident-to-resolution tracking", "Every issue is timestamped when reported and when corrected, so response time becomes a number you manage instead of a claim you defend."],
+              ["🤖", "AI triage and severity", "A spill in an active equipment lane is prioritised above an empty dispenser — automatically, and consistently at 3 AM as at 3 PM."],
+              ["📉", "Fewer operational blind spots", "Stock-outs, equipment faults, and blocked access surface immediately instead of at the end of a shift — or at the next audit."],
+              ["📋", "Audit-ready records", "Photo, time, location, and resolution on every issue. Exportable for client reviews, insurers, and internal audits."],
+              ["🚀", "No app, no login, no training", "Any worker, contractor, or temp reports in seconds from their own phone. Nothing to install, nothing to roll out."],
             ].map(([emoji, title, desc]) => (
               <Card key={title}>
                 <div style={{ fontSize: 26, marginBottom: 10 }}>{emoji}</div>
