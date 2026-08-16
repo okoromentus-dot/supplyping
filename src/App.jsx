@@ -467,6 +467,93 @@ function evaluateAccess(profile, authCreatedAt) {
   return { daysLeft: null, isPaid: false, blocked: false, status, source: "unknown" };
 }
 
+// ── SHORT CODES (/r/{token}) ─────────────────────────────────────
+// Printed QR codes and NFC tags carry an opaque token instead of embedded
+// config. The token resolves to whatever the location's CURRENT email,
+// facility name, and routing are — so changing an alert address or renaming
+// a building never invalidates a sticker already on a wall.
+//
+// The legacy /r?ce=...&l=... format keeps working forever. Codes printed
+// before this change do not need reprinting.
+
+// Unambiguous alphabet: no 0/O/1/I/L, so a token read aloud or typed by hand
+// can't be misheard.
+const TOKEN_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+
+function makeToken(len = 7) {
+  let out = "";
+  const cryptoObj = typeof window !== "undefined" && window.crypto ? window.crypto : null;
+  if (cryptoObj && cryptoObj.getRandomValues) {
+    const buf = new Uint32Array(len);
+    cryptoObj.getRandomValues(buf);
+    for (let i = 0; i < len; i++) out += TOKEN_ALPHABET[buf[i] % TOKEN_ALPHABET.length];
+  } else {
+    for (let i = 0; i < len; i++) out += TOKEN_ALPHABET[Math.floor(Math.random() * TOKEN_ALPHABET.length)];
+  }
+  return out;
+}
+
+// Assigns a token to every room/unit that doesn't have one yet. Existing
+// tokens are never regenerated — that would break codes already printed.
+function ensureRoomTokens(rooms) {
+  let changed = false;
+  const out = (rooms || []).map((room) => {
+    const units = Math.max(1, Number(room.stalls || 1));
+    const tokens = Array.isArray(room.tokens) ? [...room.tokens] : [];
+    for (let i = 0; i < units; i++) {
+      if (!tokens[i]) { tokens[i] = makeToken(); changed = true; }
+    }
+    if (tokens.length > units) tokens.length = units;
+    return { ...room, tokens };
+  });
+  return { rooms: out, changed };
+}
+
+const shortUrl = (token) => `https://supplyping.com/r/${token}`;
+
+// Resolves a token to its client + location. Scans the Clients table because
+// tokens live inside each row's Locations JSON; fine at current scale, and
+// the natural thing to index once this moves to Postgres.
+async function fetchByToken(token) {
+  const clean = String(token || "").toLowerCase().trim();
+  if (!clean) return null;
+  try {
+    const res = await fetch(
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/Clients?maxRecords=200`,
+      { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (!res.ok || !data.records) {
+      console.error("[ShortCode] Clients read failed:", res.status);
+      return null;
+    }
+    for (const rec of data.records) {
+      const f = rec.fields || {};
+      let rooms = [];
+      if (f["Locations"]) { try { rooms = JSON.parse(f["Locations"]) || []; } catch (e) { rooms = []; } }
+      for (const room of rooms) {
+        const tokens = Array.isArray(room.tokens) ? room.tokens : [];
+        const idx = tokens.findIndex((t) => String(t).toLowerCase() === clean);
+        if (idx !== -1) {
+          return {
+            facility: f["Facility Name"] || f["Business Name"] || "",
+            business: f["Business Name"] || "",
+            cleaningEmail: f["Cleaning Team Email"] || "",
+            room: room.name || "",
+            category: room.category || "",
+            unit: tokens.length > 1 ? String(idx + 1) : "",
+          };
+        }
+      }
+    }
+    console.warn(`[ShortCode] No location matched token "${clean}"`);
+    return null;
+  } catch (e) {
+    console.error("[ShortCode] Lookup error:", e);
+    return null;
+  }
+}
+
 // ── FACILITY FALLBACK (/f/{slug}) ────────────────────────────────
 // A backup entry point for when a QR code is damaged, missing, or a worker
 // is between zones. It loads that facility's saved areas so the report still
@@ -1176,6 +1263,8 @@ export default function App() {
   const [fallbackData, setFallbackData] = useState(null);
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [fallbackSlug, setFallbackSlug] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+  const [tokenFailed, setTokenFailed] = useState(false);
   const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
@@ -1272,7 +1361,7 @@ export default function App() {
     // Never hijack QR report links, password reset, or the legal pages.
     const isPublicFlow =
       path === "/r" || path.startsWith("/r/") || params.has("ce") || params.has("l") ||
-      path === "/reset" || path === "/terms" || path === "/privacy" || path.startsWith("/f/") ||
+      path === "/reset" || path === "/terms" || path === "/privacy" || path.startsWith("/f/") || path.startsWith("/r/") ||
       hash.includes("type=recovery");
     if (isPublicFlow) return;
 
@@ -1351,6 +1440,20 @@ export default function App() {
       window.removeEventListener("offline", goOffline);
     };
   }, []);
+
+  // Backfill short-code tokens for any location that predates this feature.
+  // Tokens are generated once and persisted; an existing token is never
+  // regenerated, because that would invalidate stickers already printed.
+  useEffect(() => {
+    if (!email || !rooms || rooms.length === 0) return;
+    const { rooms: withTokens, changed } = ensureRoomTokens(rooms);
+    if (!changed) return;
+    setRooms(withTokens);
+    saveLocationsToAirtable(email, withTokens, {
+      "Facility Name": location,
+      "Cleaning Team Email": alertEmail,
+    }).then(() => console.log("[ShortCode] Tokens backfilled for", withTokens.length, "locations"));
+  }, [email, rooms.length]);
 
   // Alert routing editor — one definition used on both the Dashboard and the
   // Manage screen so the two can never drift apart.
@@ -1599,6 +1702,30 @@ export default function App() {
     }
     if (path === "/terms") { setScreen("terms"); return; }
     if (path === "/privacy") { setScreen("privacy"); return; }
+
+    // Short code: /r/{token} — the durable format. Resolves to current config,
+    // so renaming a facility or changing an alert email never breaks a
+    // printed sticker. Legacy /r?ce=... is handled further down, unchanged.
+    if (/^\/r\/[^/]+$/.test(path)) {
+      const token = decodeURIComponent(path.slice(3)).replace(/\/$/, "");
+      setScreen("report");
+      setReportLoading(true);
+      fetchByToken(token).then((hit) => {
+        setReportLoading(false);
+        if (!hit) {
+          setTokenFailed(true);
+          return;
+        }
+        setQrLocation(hit.facility || "");
+        setQrBusiness(hit.business || "");
+        setQrRoom(hit.room || "");
+        setQrStall(hit.unit || "");
+        setQrCategory(hit.category || "");
+        setAlertEmail(hit.cleaningEmail || "");
+        console.log(`[ShortCode] "${token}" → ${hit.facility} / ${hit.room}`);
+      });
+      return;
+    }
 
     // Facility fallback: /f/{slug} — a backup when a code is unreadable.
     if (path.startsWith("/f/")) {
@@ -2207,7 +2334,8 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
               {rooms.flatMap((room, ri) =>
                 Array.from({ length: room.stalls }, (_, si) => {
-                  const formUrl = buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
+                  const tok = (room.tokens || [])[si];
+                  const formUrl = tok ? shortUrl(tok) : buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                   return (
                     <div key={`${ri}-${si}`} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, textAlign: "center", boxShadow: T.shadow }}>
                       <img src={qr(formUrl)} alt="" style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
@@ -2584,7 +2712,8 @@ export default function App() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
               {Array.from({ length: room.stalls }, (_, si) => {
-                const formUrl = buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
+                const tok = (room.tokens || [])[si];
+                const formUrl = tok ? shortUrl(tok) : buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                 return (
                   <div key={si} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, textAlign: "center" }}>
                     <img src={qr(formUrl)} alt="" style={{ width: 110, height: 110, borderRadius: 8, marginBottom: 8 }} />
@@ -2605,7 +2734,8 @@ export default function App() {
                         Web NFC exists, which is Chrome on Android. */}
                     <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
                       <button onClick={() => {
-                        const nfcUrl = buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
+                        const t2 = (room.tokens || [])[si];
+                        const nfcUrl = t2 ? shortUrl(t2) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                         try {
                           navigator.clipboard.writeText(nfcUrl);
                           showToast("📋 Tag URL copied — paste into NFC Tools", T.green);
@@ -2615,7 +2745,8 @@ export default function App() {
                       </button>
                       {typeof window !== "undefined" && "NDEFReader" in window ? (
                         <button onClick={async () => {
-                          const nfcUrl = buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
+                          const t2 = (room.tokens || [])[si];
+                        const nfcUrl = t2 ? shortUrl(t2) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                           try {
                             showToast("📡 Hold a tag to your phone…", T.blue);
                             const writer = new window.NDEFReader();
@@ -2653,7 +2784,7 @@ export default function App() {
                   lines.push([
                     esc(room.name),
                     esc(room.stalls > 1 ? `Unit ${si + 1}` : ""),
-                    esc(buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category)),
+                    esc(((room.tokens || [])[si]) ? shortUrl(room.tokens[si]) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category)),
                   ].join(","));
                 });
               });
@@ -2682,6 +2813,19 @@ export default function App() {
   );
 
   // ── REPORT (QR Scan target) ──
+  if (screen === "report" && tokenFailed) return (
+    <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <Card style={{ maxWidth: 420, textAlign: "center", padding: "34px 26px" }}>
+        <div style={{ fontSize: 34, marginBottom: 12 }}>🔍</div>
+        <h2 style={{ fontFamily: font.display, fontSize: 21, fontWeight: 700, margin: "0 0 8px" }}>Code not recognised</h2>
+        <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: "0 0 18px" }}>
+          This code isn't linked to a location yet. Let your supervisor know, or scan a different SupplyPing code nearby.
+        </p>
+        <Btn label="Go to SupplyPing" onClick={() => { window.location.href = "/"; }} variant="outline" full />
+      </Card>
+    </div>
+  );
+
   if (screen === "report") return (
     <div style={{ fontFamily: font.body, background: T.cream, minHeight: "100vh", color: T.ink }}>
       <style>{`* { box-sizing: border-box; }`}</style>
