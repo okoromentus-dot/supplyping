@@ -1265,6 +1265,7 @@ export default function App() {
   const [fallbackSlug, setFallbackSlug] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
   const [tokenFailed, setTokenFailed] = useState(false);
+  const [tokensPersisted, setTokensPersisted] = useState(false);
   const [aiImmediateRisk, setAiImmediateRisk] = useState(false);
   const [reportLang, setReportLang] = useState("en");
   const [trialDaysLeft, setTrialDaysLeft] = useState(null); // null = unknown/loading
@@ -1447,12 +1448,34 @@ export default function App() {
   useEffect(() => {
     if (!email || !rooms || rooms.length === 0) return;
     const { rooms: withTokens, changed } = ensureRoomTokens(rooms);
-    if (!changed) return;
-    setRooms(withTokens);
-    saveLocationsToAirtable(email, withTokens, {
-      "Facility Name": location,
-      "Cleaning Team Email": alertEmail,
-    }).then(() => console.log("[ShortCode] Tokens backfilled for", withTokens.length, "locations"));
+    if (!changed) {
+      // Tokens already exist locally — confirm they're persisted before the
+      // QR cards start rendering short URLs.
+      if (rooms.some(r => (r.tokens || []).length)) setTokensPersisted(true);
+      return;
+    }
+    // Save FIRST, then update state. Updating state first caused the QR card
+    // to render a short URL for a token that didn't exist server-side yet —
+    // scanning it returned "Code not recognised".
+    let cancelled = false;
+    (async () => {
+      const res = await saveLocationsToAirtable(email, withTokens, {
+        "Facility Name": location,
+        "Cleaning Team Email": alertEmail,
+      });
+      if (cancelled) return;
+      if (res && res.ok) {
+        setRooms(withTokens);
+        setTokensPersisted(true);
+        console.log("[ShortCode] Tokens saved for", withTokens.length, "locations");
+      } else {
+        // Keep emitting legacy long URLs — they always work — rather than
+        // printing short codes that can't resolve.
+        setTokensPersisted(false);
+        console.error("[ShortCode] Token save FAILED — QR codes will keep using the long-form URL until this succeeds.");
+      }
+    })();
+    return () => { cancelled = true; };
   }, [email, rooms.length]);
 
   // Alert routing editor — one definition used on both the Dashboard and the
@@ -2334,7 +2357,7 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
               {rooms.flatMap((room, ri) =>
                 Array.from({ length: room.stalls }, (_, si) => {
-                  const tok = (room.tokens || [])[si];
+                  const tok = (tokensPersisted ? (room.tokens || [])[si] : null);
                   const formUrl = tok ? shortUrl(tok) : buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                   return (
                     <div key={`${ri}-${si}`} style={{ background: T.white, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, textAlign: "center", boxShadow: T.shadow }}>
@@ -2712,7 +2735,7 @@ export default function App() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
               {Array.from({ length: room.stalls }, (_, si) => {
-                const tok = (room.tokens || [])[si];
+                const tok = (tokensPersisted ? (room.tokens || [])[si] : null);
                 const formUrl = tok ? shortUrl(tok) : buildFormUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                 return (
                   <div key={si} style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, textAlign: "center" }}>
@@ -2734,7 +2757,7 @@ export default function App() {
                         Web NFC exists, which is Chrome on Android. */}
                     <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
                       <button onClick={() => {
-                        const t2 = (room.tokens || [])[si];
+                        const t2 = tokensPersisted ? (room.tokens || [])[si] : null;
                         const nfcUrl = t2 ? shortUrl(t2) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                         try {
                           navigator.clipboard.writeText(nfcUrl);
@@ -2745,7 +2768,7 @@ export default function App() {
                       </button>
                       {typeof window !== "undefined" && "NDEFReader" in window ? (
                         <button onClick={async () => {
-                          const t2 = (room.tokens || [])[si];
+                          const t2 = tokensPersisted ? (room.tokens || [])[si] : null;
                         const nfcUrl = t2 ? shortUrl(t2) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category);
                           try {
                             showToast("📡 Hold a tag to your phone…", T.blue);
@@ -2784,7 +2807,7 @@ export default function App() {
                   lines.push([
                     esc(room.name),
                     esc(room.stalls > 1 ? `Unit ${si + 1}` : ""),
-                    esc(((room.tokens || [])[si]) ? shortUrl(room.tokens[si]) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category)),
+                    esc((tokensPersisted && (room.tokens || [])[si]) ? shortUrl(room.tokens[si]) : buildNfcUrl(alertEmail, location, room.name, si + 1, bizName, room.category)),
                   ].join(","));
                 });
               });
