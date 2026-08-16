@@ -1424,6 +1424,29 @@ export default function App() {
         </button>
       </div>
 
+      {smsEnabled && (
+        <div style={{ marginBottom: 16 }}>
+          <Btn label="📱 Send me a test SMS" onClick={async () => {
+            const target = String(alertPhone || "").trim();
+            if (!target) { showToast("Add a Primary Alert Phone first, then save.", T.yellow); return; }
+            showToast("Sending test SMS…", T.blue);
+            const r = await sendSmsAlert([target], "SupplyPing test message. If you received this, SMS alerts are working.");
+            console.log("[SMS test] result:", JSON.stringify(r));
+            if (r && r.sent) {
+              showToast(`✅ Test sent to ${target}. Check your phone.`, T.green);
+            } else if (r && r.skipped) {
+              showToast("⚠️ SMS isn't configured on the server yet — Twilio keys missing in Vercel.", T.yellow);
+            } else {
+              const why = (r && (r.error || r.reason)) || "unknown error";
+              showToast(`❌ Test failed: ${why}`, T.red);
+            }
+          }} variant="outline" full />
+          <div style={{ fontSize: 11, color: T.dim, marginTop: 6, lineHeight: 1.5 }}>
+            Sends one message to your Primary Alert Phone so you can confirm delivery before relying on it.
+          </div>
+        </div>
+      )}
+
       {TEAM_FIELDS.map(([key, label, ph]) => (
         <div key={key} style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
@@ -3048,12 +3071,19 @@ export default function App() {
               const activeSmsOn = hasStateRouting ? smsEnabled : !!(activeTeams && activeTeams._smsEnabled);
               const activePhones = hasStateRouting ? teamPhones : ((activeTeams && activeTeams._phones) || {});
               const activePrimaryPhone = hasStateRouting ? alertPhone : ((activeTeams && activeTeams._primaryPhone) || "");
+              let smsResult = null;
               if (activeSmsOn) {
                 const smsRecipients = routeRecipients(reportIssues, { ...activePhones, clean: activePrimaryPhone }, activePrimaryPhone);
                 if (smsRecipients.length) {
                   const smsIssue = (reportIssues[0] || "issue").replace(/^.{0,2}\s*/, ""); // drop leading emoji for SMS
-                  sendSmsAlert(smsRecipients, `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`);
+                  smsResult = await sendSmsAlert(smsRecipients, `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`);
+                  console.log("[SMS] result:", JSON.stringify(smsResult), "to:", smsRecipients.join(", "));
+                } else {
+                  console.warn("[SMS] Enabled but no phone numbers on file — nothing sent.");
+                  smsResult = { sent: false, reason: "no numbers on file" };
                 }
+              } else {
+                console.log("[SMS] Not enabled for this account — email only.");
               }
               const recipients = [...routed, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
               console.log("[Routing] issues:", reportIssues,
@@ -3068,6 +3098,7 @@ export default function App() {
                 source: hasStateRouting ? "account settings" : "lookup",
                 noTeamRouting: !Object.values(activeTeams || {}).some(v => v && String(v).trim()),
                 lookedFor: cleaningEmail,
+                sms: smsResult,
               });
               const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
@@ -3113,6 +3144,13 @@ export default function App() {
                 ))}
                 {notifiedInfo.teams.length > 0 && (
                   <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Team: {notifiedInfo.teams.join(" + ")}</div>
+                )}
+                {notifiedInfo.sms && (
+                  <div style={{ fontSize: 10.5, marginTop: 6, lineHeight: 1.45, color: notifiedInfo.sms.sent ? T.green : T.yellow }}>
+                    {notifiedInfo.sms.sent
+                      ? `📱 SMS sent (${notifiedInfo.sms.count || 1})`
+                      : `📱 SMS not sent — ${notifiedInfo.sms.reason || notifiedInfo.sms.error || "check Twilio setup"}`}
+                  </div>
                 )}
                 {notifiedInfo.noTeamRouting && (
                   <div style={{ fontSize: 10.5, color: T.yellow, marginTop: 6, lineHeight: 1.45 }}>

@@ -58,7 +58,20 @@ export default async function handler(req, res) {
     if (failed.length) console.error("[SMS] Some sends failed:", failed);
     console.log(`[SMS] Sent ${sent}/${numbers.length}`);
 
-    return res.status(200).json({ sent: sent > 0, count: sent, failed });
+    // Surface the first real Twilio error so the UI can show something
+    // actionable. Code 21608 = unverified number on a trial account;
+    // 21610 = recipient replied STOP; 30034 = A2P 10DLC not registered.
+    let reason = null;
+    if (sent === 0 && failed.length) {
+      const msg = String(failed[0].error || "");
+      if (/21608/.test(msg)) reason = "Twilio trial account — verify this number in Twilio first";
+      else if (/21610/.test(msg)) reason = "this number replied STOP and is unsubscribed";
+      else if (/30034|A2P|10DLC/i.test(msg)) reason = "A2P 10DLC registration required for business SMS";
+      else if (/21606|21659/.test(msg)) reason = "sending number not enabled for SMS in Twilio";
+      else reason = msg.slice(0, 120);
+    }
+
+    return res.status(200).json({ sent: sent > 0, count: sent, failed, reason });
   } catch (e) {
     console.error("[SMS] Handler error:", e && e.message);
     return res.status(500).json({ error: e && e.message ? e.message : "SMS send failed." });
