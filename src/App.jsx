@@ -29,7 +29,7 @@ const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
 // Build marker — bump when triggering redeploys; visible in browser console.
 const BUILD_VERSION = "2026-08-12-supabase-profiles";
-try { console.log(`[SupplyPing] build ${BUILD_VERSION} — Supabase profiles + SMS + NFC`); } catch (e) {}
+try { console.log(`[SupplyPing] build ${BUILD_VERSION} · compiled ${typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : "dev"} UTC`); } catch (e) {}
 
 // Initialize EmailJS once at startup
 try { emailjs.init(EMAILJS_PUBLIC_KEY); } catch (e) {}
