@@ -1158,6 +1158,16 @@ async function loadClientData(email) {
         maint: f["Maintenance Team Email"] || "",
         supply: f["Supplies Team Email"] || "",
       },
+      // These were being SAVED but never READ BACK, so the SMS toggle reset to
+      // off and team phone numbers disappeared on every page load — which made
+      // it look like the numbers weren't saving at all.
+      teamPhones: {
+        safety: f["Safety Team Phone"] || "",
+        security: f["Security Team Phone"] || "",
+        maint: f["Maintenance Team Phone"] || "",
+        supply: f["Supplies Team Phone"] || "",
+      },
+      smsEnabled: String(f["SMS Enabled"] || "").toLowerCase() === "yes",
       bizName: f["Business Name"] || "",
       phone: f["Phone Number"] || "",
     };
@@ -1388,9 +1398,9 @@ export default function App() {
       if (te) setTeamEmails(prev => ({ ...prev, ...te }));
       if (profile?.plan) setPlan(profile.plan);
       if (profile?.clientStatus) setClientStatus(profile.clientStatus);
-      const tp2 = profile?.teamPhones;
+      const tp2 = mergeTeamEmails(profile?.teamPhones, backup?.teamPhones);
       if (tp2) setTeamPhones(prev => ({ ...prev, ...tp2 }));
-      if (profile?.smsEnabled) setSmsEnabled(true);
+      if (profile?.smsEnabled || backup?.smsEnabled) setSmsEnabled(true);
       if (biz) setBizName(biz);
       if (fac) setLocation(fac);
       if (ce) setAlertEmail(ce);
@@ -1503,7 +1513,9 @@ export default function App() {
     // the Airtable columns aren't there yet.
     saveProfileBackup(email, { bizName, location, alertEmail, alertPhone, rooms, teamEmails, teamPhones, smsEnabled });
     const dropped = (res && res.dropped) || [];
-    const teamDropped = dropped.filter(d => /Team Email$/.test(d));
+    // Phone/SMS columns are new — if they're missing from Airtable, say so by
+    // name instead of reporting a clean save that didn't fully happen.
+    const teamDropped = dropped.filter(d => /Team Email$|Team Phone$|^SMS Enabled$|^Phone Number$/.test(d));
     if (!res || !res.ok) {
       showToast("⚠️ Saved on this device only — couldn't reach Airtable.", T.yellow);
     } else if (teamDropped.length) {
@@ -2159,9 +2171,9 @@ export default function App() {
             if (te) setTeamEmails(prev => ({ ...prev, ...te }));
             if (profile?.plan) setPlan(profile.plan);
             if (profile?.clientStatus) setClientStatus(profile.clientStatus);
-            const tp = profile?.teamPhones;
+            const tp = mergeTeamEmails(profile?.teamPhones, backup?.teamPhones);
             if (tp) setTeamPhones(prev => ({ ...prev, ...tp }));
-            if (profile?.smsEnabled) setSmsEnabled(true);
+            if (profile?.smsEnabled || backup?.smsEnabled) setSmsEnabled(true);
             if (biz) setBizName(biz);
             if (fac) setLocation(fac);
             if (ce) setAlertEmail(ce);
