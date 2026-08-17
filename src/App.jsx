@@ -954,8 +954,19 @@ async function airtableWrite(url, method, fields, label) {
     const msg = (err && err.error && (err.error.message || err.error.type)) || `HTTP ${res.status}`;
     const unknown = /Unknown field name:\s*\\?"?([^"\\]+)/i.exec(String(msg));
     if (unknown && payload[unknown[1]] !== undefined) {
-      dropped.push(unknown[1]);
-      delete payload[unknown[1]];
+      // Log with visible delimiters and a character dump. A column that looks
+      // correct in Airtable but is rejected here almost always has a trailing
+      // space, a double space, or a non-breaking space in its name — none of
+      // which are visible in the Airtable UI.
+      const name = unknown[1];
+      console.warn(
+        `[Airtable] Rejected field ⟦${name}⟧ (length ${name.length})`,
+        "\n  → Airtable does not have a column with EXACTLY this name in this table.",
+        "\n  → Check for: trailing space, double space, or wrong table (Clients vs Reports).",
+        "\n  → Char codes:", Array.from(name).map(ch => `${ch}:${ch.charCodeAt(0)}`).join(" ")
+      );
+      dropped.push(name);
+      delete payload[name];
       continue; // retry without it
     }
     console.error(`[Airtable] ${label} FAILED —`, res.status, msg, "| fields:", JSON.stringify(Object.keys(payload)));
