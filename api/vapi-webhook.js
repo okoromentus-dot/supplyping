@@ -149,6 +149,79 @@ function pickTeam(issueText) {
   return "clean";
 }
 
+// Demo links by vertical, texted to prospects who ask for more info.
+const DEMO_LINKS = {
+  facilities: "https://supplyping.com/demo-facilities/",
+  warehouse: "https://supplyping.com/demo-facilities/",
+  cleaning: "https://supplyping.com/demo-cleaning/",
+  senior: "https://supplyping.com/demo-senior/",
+  hospital: "https://supplyping.com/demo-hospital/",
+  restaurant: "https://supplyping.com/demo-restaurants/",
+  property: "https://supplyping.com/demo-commercial-real-estate/",
+  school: "https://supplyping.com/demo-schools/",
+  gym: "https://supplyping.com/demo-gyms/",
+  transit: "https://supplyping.com/demo-transit/",
+};
+
+// Emails the founder when a call needs human follow-up. Uses the same EmailJS
+// general template the app already uses, so there's no new service to
+// configure and nothing extra to keep alive.
+async function notifyFounder({ subject, heading, body }) {
+  try {
+    const payload = {
+      service_id: EMAILJS_SERVICE,
+      template_id: process.env.EMAILJS_GENERAL_TEMPLATE || "template_xgh05zq",
+      user_id: EMAILJS_PUBLIC_KEY,
+      template_params: {
+        to_email: MANAGEMENT_EMAIL,
+        email: MANAGEMENT_EMAIL,
+        subject,
+        heading,
+        message: body,
+        time: new Date().toLocaleString(),
+      },
+    };
+    if (EMAILJS_PRIVATE_KEY) payload.accessToken = EMAILJS_PRIVATE_KEY;
+    const r = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      console.error("[Notify] Email failed:", r.status, t.slice(0, 200));
+      return false;
+    }
+    console.log("[Notify] Sent:", subject);
+    return true;
+  } catch (e) {
+    console.error("[Notify] Error:", e && e.message);
+    return false;
+  }
+}
+
+// Texts a demo link to a caller who asked for one, via the existing SMS API.
+async function textDemoLink(toNumber, vertical) {
+  const link = DEMO_LINKS[String(vertical || "").toLowerCase().trim()] || DEMO_LINKS.facilities;
+  const base = process.env.PUBLIC_BASE_URL || "https://supplyping.com";
+  try {
+    const r = await fetch(`${base}/api/send-sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipients: [toNumber],
+        message: `Thanks for calling SupplyPing. Here's the 60-second demo: ${link}`,
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    console.log("[SendInfo] SMS result:", JSON.stringify(data));
+    return data;
+  } catch (e) {
+    console.error("[SendInfo] Failed:", e && e.message);
+    return { sent: false, error: true };
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
@@ -180,8 +253,57 @@ export default async function handler(req, res) {
 
     if (Array.isArray(toolCalls) && toolCalls.length) {
       const fn = toolCalls[0].function || toolCalls[0];
+      const fnName = String(fn.name || "").toLowerCase();
       let args = fn.arguments || fn.parameters || {};
       if (typeof args === "string") { try { args = JSON.parse(args); } catch (e) { args = {}; } }
+
+      // ── Non-report tools, handled before the report path ──
+
+      // Caller asked for a demo link by text.
+      if (fnName === "send_info") {
+        const to = args.phone || args.phone_number || args.number || callerNumber;
+        const vertical = args.vertical || args.industry || "facilities";
+        const sms = await textDemoLink(to, vertical);
+        await notifyFounder({
+          subject: `Demo link requested — ${to || "unknown number"}`,
+          heading: "A caller asked for the demo link",
+          body: `Number: ${to || "unknown"}\nVertical: ${vertical}\nSMS delivered: ${sms && sms.sent ? "yes" : "NO — follow up manually"}\n\nWorth a personal follow-up while it's warm.`,
+        });
+        return res.status(200).json({
+          result: sms && sms.sent
+            ? "Just sent that over — you should see it in a few seconds."
+            : "I wasn't able to text that through — let me have someone follow up with you by email instead.",
+        });
+      }
+
+      // Caller asked not to be contacted again. Honour this immediately.
+      if (fnName === "do_not_call") {
+        const to = args.phone || args.phone_number || args.number || callerNumber;
+        console.log("[DoNotCall] Suppression requested for:", to);
+        await notifyFounder({
+          subject: `DO NOT CALL — ${to || "unknown number"}`,
+          heading: "A contact asked not to be called again",
+          body: `Number: ${to || "unknown"}\n\nRemove this number from every outbound list immediately, including your Vapi campaign CSVs and lead trackers. This is a legal obligation, not a preference.`,
+        });
+        return res.status(200).json({
+          result: "Understood — I'll make sure you're not contacted again. Have a good day.",
+        });
+      }
+
+      // Caller asked something the agent shouldn't answer.
+      if (fnName === "flag_for_followup") {
+        const contact = args.email || args.phone || args.phone_number || callerNumber || "not provided";
+        const question = args.question || args.summary || args.note || "(no detail captured)";
+        await notifyFounder({
+          subject: `Follow-up needed — ${contact}`,
+          heading: "A caller asked something the agent couldn't answer",
+          body: `Contact: ${contact}\nQuestion: ${question}\nCaller number: ${callerNumber || "unknown"}\n\nThis person is expecting a reply from a human — worth answering today.`,
+        });
+        return res.status(200).json({
+          result: "Thanks — I've passed that to our team and someone will follow up with you directly.",
+        });
+      }
+
       details = {
         issue: args.issue || args.problem || args.description || "",
         location: args.location || args.facility || args.site || "",
@@ -259,6 +381,26 @@ export default async function handler(req, res) {
     console.log(
       `[Vapi] ${type || "tool-call"} -> report ${write.ok ? "saved " + write.id : "FAILED"} | team: ${teamKey} | emailed: ${emailed} | to: ${recipients.join(", ") || "none"}`
     );
+
+    // Founder notification on every phone report. A call is a strong signal —
+    // either a client is actively using the product, or something went wrong
+    // enough that someone picked up a phone. Both are worth knowing about
+    // the same day, not at the end of the week.
+    await notifyFounder({
+      subject: `Phone report — ${details.issue || "facility issue"}`.slice(0, 120),
+      heading: write.ok ? "A facility issue was reported by phone" : "⚠️ Phone report FAILED to save",
+      body: [
+        `Issue: ${details.issue || "(none captured)"}`,
+        `Location: ${scopeLocation || "(unknown)"}`,
+        details.room ? `Area: ${details.room}` : "",
+        `Severity: ${details.severity || "not stated"}`,
+        `Routed to: ${teamKey} team`,
+        `Alert emailed: ${emailed ? "yes" : "NO — follow up manually"}`,
+        callerNumber ? `Caller: ${callerNumber}` : "",
+        details.reporter ? `Reported by: ${details.reporter}` : "",
+        !write.ok ? "\n⚠️ This did NOT save to Airtable. Log it manually." : "",
+      ].filter(Boolean).join("\n"),
+    });
 
     // Vapi reads this back to the caller when it's a tool call.
     return res.status(200).json({
