@@ -194,6 +194,7 @@ const font = {
 
 const INDUSTRIES = [
   { id: "warehouse", emoji: "🏭", label: "Warehouse / Logistics" },
+  { id: "trucking", emoji: "🚛", label: "Trucking / Freight Docks" },
   { id: "hotel", emoji: "🏨", label: "Hotel / Hospitality" },
   { id: "boutique", emoji: "🏩", label: "Boutique Hotel" },
   { id: "school", emoji: "🏫", label: "School" },
