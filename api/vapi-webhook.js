@@ -292,15 +292,42 @@ export default async function handler(req, res) {
 
       // Caller asked something the agent shouldn't answer.
       if (fnName === "flag_for_followup") {
-        const contact = args.email || args.phone || args.phone_number || callerNumber || "not provided";
+        const phone = args.phone || args.phone_number || callerNumber || "";
+        const contact = args.email || phone || "not provided";
         const question = args.question || args.summary || args.note || "(no detail captured)";
+
         await notifyFounder({
-          subject: `Follow-up needed — ${contact}`,
-          heading: "A caller asked something the agent couldn't answer",
-          body: `Contact: ${contact}\nQuestion: ${question}\nCaller number: ${callerNumber || "unknown"}\n\nThis person is expecting a reply from a human — worth answering today.`,
+          subject: `Callback requested — ${contact}`,
+          heading: "A caller wants a human to call them back",
+          body: `Contact: ${contact}\nReason: ${question}\nCaller number: ${callerNumber || "unknown"}\n\nThey were told someone would call within 5-10 minutes — that clock is already running.`,
         });
+
+        // The AI promises "you'll get a text" — make that literally true rather
+        // than a spoken claim with nothing behind it. Best-effort: if this
+        // fails, the founder email above still went out, so nothing is lost.
+        let smsSent = false;
+        if (phone) {
+          try {
+            const r = await fetch(`${process.env.PUBLIC_BASE_URL || "https://supplyping.com"}/api/send-sms`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                recipients: [phone],
+                message: "Thanks for calling SupplyPing — a team member will call you back within 5 to 10 minutes.",
+              }),
+            });
+            const data = await r.json().catch(() => ({}));
+            smsSent = !!(data && data.sent);
+            console.log("[FlagFollowup] Caller SMS result:", JSON.stringify(data));
+          } catch (e) {
+            console.error("[FlagFollowup] Caller SMS failed:", e && e.message);
+          }
+        }
+
         return res.status(200).json({
-          result: "Thanks — I've passed that to our team and someone will follow up with you directly.",
+          result: smsSent
+            ? "Thanks — you'll get a text confirming that, and someone will call you within five to ten minutes."
+            : "Thanks — I've passed that to our team, and someone will call you within five to ten minutes.",
         });
       }
 
