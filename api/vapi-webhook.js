@@ -167,35 +167,80 @@ const DEMO_LINKS = {
 // general template the app already uses, so there's no new service to
 // configure and nothing extra to keep alive.
 async function notifyFounder({ subject, heading, body }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.error("[Notify] RESEND_API_KEY not set — email skipped. Falling back to SMS.");
+    return await notifyFounderBySms({ subject, body });
+  }
+
   try {
-    const payload = {
-      service_id: EMAILJS_SERVICE,
-      template_id: process.env.EMAILJS_GENERAL_TEMPLATE || "template_xgh05zq",
-      user_id: EMAILJS_PUBLIC_KEY,
-      template_params: {
-        to_email: MANAGEMENT_EMAIL,
-        email: MANAGEMENT_EMAIL,
-        subject,
-        heading,
-        message: body,
-        time: new Date().toLocaleString(),
-      },
-    };
-    if (EMAILJS_PRIVATE_KEY) payload.accessToken = EMAILJS_PRIVATE_KEY;
-    const r = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    const html = `
+      <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto;">
+        <p style="font-size: 15px; font-weight: 700; margin: 0 0 4px;">${heading}</p>
+        <p style="font-size: 14px; color: #444; white-space: pre-wrap; line-height: 1.6;">${body}</p>
+        <p style="font-size: 11px; color: #999; margin-top: 20px;">${new Date().toLocaleString()} · SupplyPing</p>
+      </div>`;
+
+    const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        // Resend requires a verified sending domain. Until supplyping.com is
+        // verified in the Resend dashboard, use their shared test address —
+        // swap to hello@supplyping.com once verification is done.
+        from: process.env.RESEND_FROM || "SupplyPing <onboarding@resend.dev>",
+        to: [MANAGEMENT_EMAIL],
+        subject,
+        html,
+      }),
     });
+
     if (!r.ok) {
       const t = await r.text().catch(() => "");
-      console.error("[Notify] Email failed:", r.status, t.slice(0, 200));
-      return false;
+      console.error("[Notify] Resend failed:", r.status, t.slice(0, 300));
+      // Real backend service, real key, still failed — don't let the
+      // notification vanish. Fall back to texting the founder directly.
+      return await notifyFounderBySms({ subject, body });
     }
-    console.log("[Notify] Sent:", subject);
+    console.log("[Notify] Sent via Resend:", subject);
     return true;
   } catch (e) {
-    console.error("[Notify] Error:", e && e.message);
+    console.error("[Notify] Resend error:", e && e.message);
+    return await notifyFounderBySms({ subject, body });
+  }
+}
+
+// Last-resort path: if email can't be delivered for any reason, text the
+// founder's own phone instead of letting a callback request go unnoticed.
+// Uses the same /api/send-sms endpoint the caller-facing SMS already relies on.
+async function notifyFounderBySms({ subject, body }) {
+  const founderPhone = process.env.FOUNDER_PHONE;
+  if (!founderPhone) {
+    console.error("[Notify] No FOUNDER_PHONE set — no fallback channel available. This notification is lost.");
+    return false;
+  }
+  try {
+    const base = process.env.PUBLIC_BASE_URL || "https://supplyping.com";
+    const r = await fetch(`${base}/api/send-sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipients: [founderPhone],
+        message: `${subject} — ${body}`.slice(0, 300),
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (data && data.sent) {
+      console.log("[Notify] Email failed, but SMS fallback delivered.");
+      return true;
+    }
+    console.error("[Notify] SMS fallback also failed:", JSON.stringify(data));
+    return false;
+  } catch (e) {
+    console.error("[Notify] SMS fallback error:", e && e.message);
     return false;
   }
 }
