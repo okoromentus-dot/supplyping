@@ -403,9 +403,49 @@ export default async function handler(req, res) {
     }
 
     // ── Path 2: end-of-call fallback ──
+    // This used to fire on EVERY call that ended without a structured tool
+    // call — including completely normal, successful conversations with no
+    // hazard mentioned at all (e.g. someone asking how to sign up). It then
+    // shoved the raw transcript into the "issue" field and routed it to
+    // whichever team's keywords happened to match, producing a misleading
+    // founder email and a bogus Airtable "report" for a call where nothing
+    // was actually wrong. Now it only treats the call as a hazard report if
+    // the transcript plausibly describes one — otherwise it sends a plain
+    // "here's what happened" note with no fake report attached.
     if (!details && (type === "end-of-call-report" || msg.summary || msg.transcript)) {
       const summary = msg.analysis?.summary || msg.summary || "";
       const transcript = msg.transcript || "";
+      const combined = `${summary} ${transcript}`.toLowerCase();
+
+      // Loose signal that an actual hazard/issue was described, not just any
+      // call happening. Deliberately broad — false positives here just mean
+      // an ordinary call gets the (harmless) hazard-report treatment; false
+      // negatives are the bug being fixed, so err toward "not a hazard."
+      const hazardWords = [
+        "spill", "leak", "broken", "hazard", "danger", "unsafe", "blocked",
+        "fire", "smoke", "injur", "fell", "fall", "wet floor", "exposed wire",
+        "gas smell", "mold", "flooding", "out of order", "not working",
+        "damaged", "exit blocked",
+      ];
+      const looksLikeHazard = hazardWords.some((w) => combined.includes(w));
+
+      if (!looksLikeHazard) {
+        await notifyFounder({
+          subject: `Call ended — no report filed (${callerNumber || "unknown number"})`,
+          heading: "A call ended without reporting a hazard",
+          body: [
+            `Caller: ${callerNumber || "unknown"}`,
+            summary ? `Summary: ${summary}` : "",
+            transcript ? `\nTranscript excerpt:\n${String(transcript).slice(0, 500)}` : "",
+            "\nNothing was written to Reports — this didn't look like a hazard.",
+            "If this should have triggered a demo text or callback, check",
+            "whether the send_info / flag_for_followup tools actually fired",
+            "during the call (Vapi call logs will show this).",
+          ].filter(Boolean).join("\n"),
+        });
+        return res.status(200).json({ received: true, filed_as_report: false });
+      }
+
       details = {
         issue: summary || String(transcript).slice(0, 300) || "Phone report (no details captured)",
         location: "", room: "", severity: "", reporter: "",
