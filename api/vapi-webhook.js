@@ -13,7 +13,10 @@
 // Configure in Vapi: Server URL = https://supplyping.com/api/vapi-webhook
 
 const AIRTABLE_BASE = process.env.AIRTABLE_BASE_ID || "appOkUWfKR5sb2Br4";
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
+// Accept either name — some setups use AIRTABLE_API_KEY, others AIRTABLE_TOKEN.
+// Airtable's own docs call this a "Personal Access Token," which is why the
+// original variable was named that way; this just widens what's accepted.
+const AIRTABLE_TOKEN = process.env.AIRTABLE_API_KEY || process.env.AIRTABLE_TOKEN;
 const VAPI_SECRET = process.env.VAPI_WEBHOOK_SECRET || "";
 
 // Email config. EmailJS blocks non-browser calls by default — enable
@@ -195,14 +198,13 @@ async function notifyFounder({ subject, heading, body }) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // Resend requires ITS OWN domain verification — separate from Zoho's,
-        // even on the same domain. Your Zoho/Namecheap DNS work authenticates
-        // Zoho's sends only. Until supplyping.com (or a subdomain) is
-        // ALSO verified inside the Resend dashboard specifically, sending
-        // "From: hello@supplyping.com" here would either be rejected by
-        // Resend or go out unauthenticated — worse than the shared address
-        // below, not better. See the message accompanying this change.
-        from: process.env.RESEND_FROM || "SupplyPing <onboarding@resend.dev>",
+        // Requires alerts.supplyping.com to be verified as its own sending
+        // domain inside Resend's dashboard (Resend → Domains) — separate
+        // from Zoho's authentication, which only covers Zoho's own sends.
+        // If that verification isn't done, this address will bounce or send
+        // unauthenticated; fall back to the resend.dev address below until
+        // it's confirmed.
+        from: process.env.RESEND_FROM || "SupplyPing Alerts <notifications@alerts.supplyping.com>",
         to: [MANAGEMENT_EMAIL],
         subject,
         html,
