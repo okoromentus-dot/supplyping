@@ -181,6 +181,13 @@ async function notifyFounder({ subject, heading, body }) {
         <p style="font-size: 11px; color: #999; margin-top: 20px;">${new Date().toLocaleString()} · SupplyPing</p>
       </div>`;
 
+    // Plain-text fallback alongside the HTML body — required by mailbox
+    // providers' bulk-sender rules and part of what SpamAssassin scores.
+    // This is a founder-facing alert with no unsubscribe list to manage, so
+    // List-Unsubscribe is somewhat atypical here versus a marketing send —
+    // included anyway since it costs nothing and was explicitly asked for.
+    const text = `${heading}\n\n${body}\n\n${new Date().toLocaleString()} · SupplyPing`;
+
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -188,13 +195,21 @@ async function notifyFounder({ subject, heading, body }) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // Resend requires a verified sending domain. Until supplyping.com is
-        // verified in the Resend dashboard, use their shared test address —
-        // swap to hello@supplyping.com once verification is done.
+        // Resend requires ITS OWN domain verification — separate from Zoho's,
+        // even on the same domain. Your Zoho/Namecheap DNS work authenticates
+        // Zoho's sends only. Until supplyping.com (or a subdomain) is
+        // ALSO verified inside the Resend dashboard specifically, sending
+        // "From: hello@supplyping.com" here would either be rejected by
+        // Resend or go out unauthenticated — worse than the shared address
+        // below, not better. See the message accompanying this change.
         from: process.env.RESEND_FROM || "SupplyPing <onboarding@resend.dev>",
         to: [MANAGEMENT_EMAIL],
         subject,
         html,
+        text,
+        headers: {
+          "List-Unsubscribe": `<mailto:${MANAGEMENT_EMAIL}?subject=unsubscribe%20founder%20alerts>`,
+        },
       }),
     });
 
