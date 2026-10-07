@@ -61,7 +61,7 @@ Severity guide: High = immediate injury risk or blocked emergency egress. Medium
 If the photo does not clearly show a facility issue, set "confident": false and pick the closest plausible item.`;
 
     const resp = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
       {
         method: "POST",
         headers: {
