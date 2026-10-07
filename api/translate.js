@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     const targetName = LANG_NAMES[String(target || "en")] || "English";
 
     const resp = await fetch(
-      "https://gemini.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
