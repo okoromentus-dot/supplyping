@@ -35,7 +35,7 @@ export default async function handler(req, res) {
         }),
       }
     );
-    if (!resp.ok) { console.error("[translate] Gemini API error", resp.status); return res.status(502).json({ error: "translate failed" }); }
+    if (!resp.ok) { const t = await resp.text(); console.error("[translate] Gemini API error", resp.status, t.slice(0, 300)); return res.status(502).json({ error: "translate failed", geminiStatus: resp.status, detail: t.slice(0, 300) }); }
     const data = await resp.json();
     const out = (((data.candidates || [])[0] || {}).content?.parts || []).map(p => p.text || "").join("").trim();
     // `english` kept for backward compatibility with existing callers;
@@ -43,6 +43,7 @@ export default async function handler(req, res) {
     const value = out || String(text);
     return res.status(200).json({ english: value, translated: value, target: String(target || "en") });
   } catch (e) {
-    return res.status(500).json({ error: "translate failed" });
+    console.error("[translate] Unhandled error:", String(e).slice(0, 300));
+    return res.status(500).json({ error: "translate failed", detail: String(e).slice(0, 200) });
   }
 }
