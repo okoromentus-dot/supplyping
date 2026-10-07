@@ -128,6 +128,16 @@ function queueReport(payload) {
   writeQueue(queue);
 }
 
+// v2 entry: the COMPLETE report — Airtable record, email alert, and SMS —
+// so a report filed in a dead zone produces all three on reconnect, not just
+// the email. `done` flags record which stages already succeeded so a partial
+// replay never sends the same alert twice.
+function queueFullReport(entry) {
+  const queue = readQueue();
+  queue.push({ v: 2, savedAt: Date.now(), done: { airtable: false, email: false, sms: false }, ...entry });
+  writeQueue(queue);
+}
+
 // The single sender — sends the alert via EmailJS.
 // The payload's cleaning_email maps to the {{cleaning_email}} template variable
 // (also sent as to_email and email so the template's "To Email" matches
@@ -154,22 +164,81 @@ async function sendOrQueueAlert(payload) {
   }
 }
 
-// Flush every queued report back to Formspree. Re-queues any that still fail.
+// Flush every queued report. Re-queues any that still fail.
+// Legacy entries ({ params }) are email-only and flush exactly as before.
+// v2 entries replay in order: Airtable record → email alert → SMS.
+// A single in-flight lock prevents the mount flush and the "online" event
+// (which can fire within the same second) from replaying one entry twice.
+let flushInFlight = false;
 async function flushQueue() {
-  const queue = readQueue();
-  if (queue.length === 0) return 0;
-  const remaining = [];
-  let flushed = 0;
-  for (const entry of queue) {
-    try {
-      await postToFormspree(entry.params);
-      flushed++;
-    } catch (e) {
-      remaining.push(entry);
+  if (flushInFlight) return 0;
+  flushInFlight = true;
+  try {
+    const queue = readQueue();
+    if (queue.length === 0) return 0;
+    const remaining = [];
+    let flushed = 0;
+    for (const entry of queue) {
+      if (!entry || entry.v !== 2) {
+        try { await postToFormspree(entry.params); flushed++; }
+        catch (e) { remaining.push(entry); }
+        continue;
+      }
+      const done = entry.done || { airtable: false, email: false, sms: false };
+      // Team routing could not be looked up offline — resolve it now so the
+      // alert reaches the owning team, not only the primary address.
+      if (entry.routing && entry.routing.unresolved) {
+        try {
+          const rt = entry.routing;
+          const looked = await fetchTeamRouting(rt.cleaningEmail, rt.locName);
+          if (looked) {
+            const routed = routeRecipients(rt.issues, { ...looked, clean: rt.cleaningEmail }, rt.cleaningEmail);
+            const recips = [...routed, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
+            entry.email = { ...entry.email, cleaning_email: recips, to_email: recips, email: recips };
+            if (looked._smsEnabled) {
+              const primary = looked._primaryPhone || "";
+              const phones = routeRecipients(rt.issues, { ...(looked._phones || {}), clean: primary }, primary);
+              if (phones.length) entry.sms = { recipients: phones, message: rt.smsMessage };
+            }
+            entry.routing.unresolved = false;
+          }
+        } catch (e) {}
+      }
+      let ok = true;
+      // 1) Dashboard record — same progressive fallback as a live submit.
+      if (!done.airtable) {
+        const a = entry.airtable || {};
+        let r = a.extended ? await submitReportToAirtable(a.extended, "queued full") : { ok: false, netError: false };
+        if (!r.ok && a.base) r = await submitReportToAirtable(a.base, "queued base");
+        if (!r.ok && a.minimal) r = await submitReportToAirtable(a.minimal, "queued minimal");
+        if (r.ok) done.airtable = true;
+        else if (r.netError) ok = false; // still no connectivity — try again later
+        else { done.airtable = true; console.error("[Queue] Airtable rejected queued report on every fallback; alert will still send."); }
+      }
+      // 2) Email alert
+      if (ok && !done.email) {
+        try { await postToFormspree(entry.email); done.email = true; }
+        catch (e) { ok = false; }
+      }
+      // 3) SMS (only retried on a network error; a server rejection is final)
+      if (ok && !done.sms) {
+        if (entry.sms && Array.isArray(entry.sms.recipients) && entry.sms.recipients.length) {
+          const sr = await sendSmsAlert(entry.sms.recipients, entry.sms.message);
+          if (sr && sr.error === true) ok = false;
+          else done.sms = true;
+        } else {
+          done.sms = true;
+        }
+      }
+      entry.done = done;
+      if (ok && done.airtable && done.email && done.sms) flushed++;
+      else remaining.push(entry);
     }
+    writeQueue(remaining);
+    return flushed;
+  } finally {
+    flushInFlight = false;
   }
-  writeQueue(remaining);
-  return flushed;
 }
 
 // ── DESIGN TOKENS ──
@@ -515,6 +584,21 @@ const shortUrl = (token) => `https://supplyping.com/r/${token}`;
 // Resolves a token to its client + location. Scans the Clients table because
 // tokens live inside each row's Locations JSON; fine at current scale, and
 // the natural thing to index once this moves to Postgres.
+const TOKEN_CACHE_PREFIX = "sp_token_";
+function readCachedToken(clean) {
+  try {
+    const raw = localStorage.getItem(TOKEN_CACHE_PREFIX + clean);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function cacheToken(clean, hit) {
+  try { localStorage.setItem(TOKEN_CACHE_PREFIX + clean, JSON.stringify(hit)); } catch (e) {}
+}
+
+// Resolves a short code to its current config. Every successful lookup is
+// cached on the device, and a lookup that FAILS (no signal in a restroom or
+// supply room) falls back to that cache, so a code this phone has scanned
+// before still resolves offline instead of becoming "Unlisted Location".
 async function fetchByToken(token) {
   const clean = String(token || "").toLowerCase().trim();
   if (!clean) return null;
@@ -526,7 +610,9 @@ async function fetchByToken(token) {
     const data = await res.json();
     if (!res.ok || !data.records) {
       console.error("[ShortCode] Clients read failed:", res.status);
-      return null;
+      const cached = readCachedToken(clean);
+      if (cached) console.warn("[ShortCode] Using cached config for", clean);
+      return cached;
     }
     for (const rec of data.records) {
       const f = rec.fields || {};
@@ -536,7 +622,7 @@ async function fetchByToken(token) {
         const tokens = Array.isArray(room.tokens) ? room.tokens : [];
         const idx = tokens.findIndex((t) => String(t).toLowerCase() === clean);
         if (idx !== -1) {
-          return {
+          const hit = {
             facility: f["Facility Name"] || f["Business Name"] || "",
             business: f["Business Name"] || "",
             cleaningEmail: f["Cleaning Team Email"] || "",
@@ -544,6 +630,8 @@ async function fetchByToken(token) {
             category: room.category || "",
             unit: tokens.length > 1 ? String(idx + 1) : "",
           };
+          cacheToken(clean, hit);
+          return hit;
         }
       }
     }
@@ -551,7 +639,9 @@ async function fetchByToken(token) {
     return null;
   } catch (e) {
     console.error("[ShortCode] Lookup error:", e);
-    return null;
+    const cached = readCachedToken(clean);
+    if (cached) console.warn("[ShortCode] Offline — using cached config for", clean);
+    return cached;
   }
 }
 
@@ -899,11 +989,14 @@ async function fetchReports(scope) {
   } catch (e) { return []; }
 }
 
+// Returns { ok, netError }. netError distinguishes "no connectivity" (queue
+// the report and retry later) from "Airtable rejected the fields" (fall
+// through to the next, smaller payload).
 async function submitReportToAirtable(fields, attemptLabel = "report") {
   try {
     const r = await airtableWrite(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, "POST", fields, `Report (${attemptLabel})`);
-    return r.ok;
-  } catch (e) { console.error("[Airtable] Network error on report write:", e); return false; }
+    return { ok: !!r.ok, netError: false };
+  } catch (e) { console.error("[Airtable] Network error on report write:", e); return { ok: false, netError: true }; }
 }
 
 async function resolveInAirtable(id) {
@@ -1280,6 +1373,7 @@ export default function App() {
   const [aiTags, setAiTags] = useState([]);
   const [notifiedInfo, setNotifiedInfo] = useState(null); // { recipients, teams, source }
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
+  const [qrBannerDismissed, setQrBannerDismissed] = useState(false);
   const [queuedCount, setQueuedCount] = useState(0);
   const [reportDays, setReportDays] = useState(30); // 0 = all time
   const [fallbackData, setFallbackData] = useState(null);
@@ -1308,6 +1402,8 @@ export default function App() {
   // input fail silently on some mobile browsers.
   const recogRef = useRef(null);
   const [reportDone, setReportDone] = useState(false);
+  const [reportQueued, setReportQueued] = useState(false); // true when saved offline, not yet sent
+  const [signupErrors, setSignupErrors] = useState({});
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [loadingReports, setLoadingReports] = useState(false);
@@ -1387,6 +1483,9 @@ export default function App() {
       path === "/reset" || path === "/terms" || path === "/privacy" || path.startsWith("/f/") || path.startsWith("/r/") ||
       hash.includes("type=recovery");
     if (isPublicFlow) return;
+    // Demo end cards link here with ?signup=1 — open the same signup flow as
+    // the homepage "Start Free Trial" buttons.
+    if (params.get("signup") === "1") { setScreen("signup"); window.scrollTo(0, 0); return; }
 
     supabase.auth.getSession().then(async ({ data }) => {
       const sessionEmail = data?.session?.user?.email;
@@ -1835,6 +1934,14 @@ export default function App() {
       `}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
 
+      {!qrBannerDismissed && (
+        <div style={{ background: T.ink, color: T.white, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", fontSize: 13.5, fontFamily: font.body }}>
+          <span>Scanned a QR code at your facility?</span>
+          <button onClick={() => nav("report")} style={{ background: T.orange, color: T.white, border: "none", borderRadius: 8, padding: "8px 14px", fontFamily: font.body, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Report the issue here</button>
+          <button onClick={() => setQrBannerDismissed(true)} aria-label="Dismiss" style={{ background: "transparent", color: T.dim, border: "none", fontSize: 18, cursor: "pointer", padding: "0 4px", lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
       <nav style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📋</div>
@@ -2065,7 +2172,7 @@ export default function App() {
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="orange" size="lg" />
-          <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hello@supplyping.com&su=SupplyPing%20Inquiry" target="_blank" rel="noreferrer" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
+          <a href="mailto:hello@supplyping.com?subject=SupplyPing%20Inquiry" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
             Email Us →
           </a>
         </div>
@@ -2113,8 +2220,11 @@ export default function App() {
         <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 14-day pilot. No credit card required.</p>
         <Card>
           <Input label="Business Name" value={bizName} onChange={setBizName} placeholder="Your business name" />
+          {signupErrors.bizName && <div style={{ color: T.red, fontSize: 12, marginTop: -10, marginBottom: 14 }}>{signupErrors.bizName}</div>}
           <Input label="Work Email" value={email} onChange={setEmail} placeholder="you@yourbusiness.com" type="email" />
-          <Input label="Password (min 6 characters)" value={password} onChange={setPassword} placeholder="Create a strong password" type="password" />
+          {signupErrors.email && <div style={{ color: T.red, fontSize: 12, marginTop: -10, marginBottom: 14 }}>{signupErrors.email}</div>}
+          <Input label="Password (min 8 characters)" value={password} onChange={setPassword} placeholder="Create a strong password" type="password" />
+          {signupErrors.password && <div style={{ color: T.red, fontSize: 12, marginTop: -10, marginBottom: 14 }}>{signupErrors.password}</div>}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10, fontWeight: 500 }}>Your Industry</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 280, overflowY: "auto" }}>
@@ -2128,8 +2238,13 @@ export default function App() {
           </div>
           {authError && <div style={{ background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: T.red, marginBottom: 14 }}>{authError}</div>}
           <Btn label={authLoading ? "Creating account..." : "Create Account & Continue →"} onClick={async () => {
-            if (!bizName || !email || !password || !industry) { setAuthError("Please fill in all fields and select an industry."); return; }
-            if (password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
+            const errs = {};
+            if (!String(bizName || "").trim()) errs.bizName = "Please enter your business name.";
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim())) errs.email = "Please enter a valid work email.";
+            if (String(password || "").length < 8) errs.password = "Password must be at least 8 characters.";
+            setSignupErrors(errs);
+            if (Object.keys(errs).length) { setAuthError(""); return; }
+            if (!industry) { setAuthError("Please select your industry."); return; }
             setAuthError(""); setAuthLoading(true);
             const { error } = await supabase.auth.signUp({ email, password, options: { data: { business_name: bizName, industry: INDUSTRIES.find(i => i.id === industry)?.label || industry } } });
             setAuthLoading(false);
@@ -2141,7 +2256,7 @@ export default function App() {
               });
             } catch (e) {}
             setScreen("onboard"); setStep(1); window.scrollTo(0, 0);
-          }} disabled={!bizName || !email || !password || !industry || authLoading} variant="primary" full />
+          }} disabled={authLoading} variant="primary" full />
           <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: T.muted }}>
             Already have an account? <span onClick={() => nav("login")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>Log in</span>
           </div>
@@ -3225,18 +3340,28 @@ export default function App() {
               // Progressive fallback: a report must never be lost to one bad
               // field. Try full → base → bare-minimum, logging each attempt so
               // the offending field is named in the console.
-              let saved = await submitReportToAirtable(extendedFields, "full (with Severity/Details/Bathroom Status)");
-              if (!saved) saved = await submitReportToAirtable(reportFields, "base (core fields + Photo)");
-              if (!saved) {
-                const minimal = {
-                  "Location": locName,
-                  "Room": roomName,
-                  "Status": issueString,
-                  "Cleaning Team Email": cleaningEmail,
-                };
-                saved = await submitReportToAirtable(minimal, "minimal (4 text fields only)");
+              const minimalFields = {
+                "Location": locName,
+                "Room": roomName,
+                "Status": issueString,
+                "Cleaning Team Email": cleaningEmail,
+              };
+              // Dead-zone handling: if the device reports no connectivity, or
+              // every Airtable attempt died with a network error (phone thinks
+              // it is online but cannot reach anything), the WHOLE report is
+              // queued — record, email, and SMS — and replayed on reconnect.
+              const offlineNow = typeof navigator !== "undefined" && navigator.onLine === false;
+              let saved = false;
+              let airtableNetError = false;
+              if (!offlineNow) {
+                let r = await submitReportToAirtable(extendedFields, "full (with Severity/Details/Bathroom Status)");
+                if (!r.ok) r = await submitReportToAirtable(reportFields, "base (core fields + Photo)");
+                if (!r.ok) r = await submitReportToAirtable(minimalFields, "minimal (4 text fields only)");
+                saved = r.ok;
+                airtableNetError = !r.ok && r.netError;
               }
-              if (!saved) showToast("⚠️ Alert sent, but the dashboard record failed to save — check console.", T.yellow);
+              const noSignal = offlineNow || airtableNetError;
+              if (!saved && !noSignal) showToast("⚠️ Alert sent, but the dashboard record failed to save — check console.", T.yellow);
 
               // 2) EmailJS alert (or offline queue).
               // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
@@ -3248,9 +3373,14 @@ export default function App() {
               // scanning a QR code has no session and no state to draw on.
               let activeTeams = teamEmails;
               const hasStateRouting = Object.values(teamEmails || {}).some(v => v && String(v).trim());
+              let routingUnresolved = false;
               if (!hasStateRouting) {
-                const looked = await fetchTeamRouting(cleaningEmail, locName);
-                if (looked) activeTeams = looked;
+                if (noSignal) {
+                  routingUnresolved = true; // looked up at flush time instead
+                } else {
+                  const looked = await fetchTeamRouting(cleaningEmail, locName);
+                  if (looked) activeTeams = looked;
+                }
               }
               const routed = routeRecipients(reportIssues, { ...activeTeams, clean: cleaningEmail }, cleaningEmail);
               const notifiedTeams = teamsForItems(reportIssues);
@@ -3263,12 +3393,18 @@ export default function App() {
               const activePhones = hasStateRouting ? teamPhones : ((activeTeams && activeTeams._phones) || {});
               const activePrimaryPhone = hasStateRouting ? alertPhone : ((activeTeams && activeTeams._primaryPhone) || "");
               let smsResult = null;
+              let smsRecipients = [];
+              const smsIssue = (reportIssues[0] || "issue").replace(/^.{0,2}\s*/, ""); // drop leading emoji for SMS
+              const smsMessage = `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`;
               if (activeSmsOn) {
-                const smsRecipients = routeRecipients(reportIssues, { ...activePhones, clean: activePrimaryPhone }, activePrimaryPhone);
+                smsRecipients = routeRecipients(reportIssues, { ...activePhones, clean: activePrimaryPhone }, activePrimaryPhone);
                 if (smsRecipients.length) {
-                  const smsIssue = (reportIssues[0] || "issue").replace(/^.{0,2}\s*/, ""); // drop leading emoji for SMS
-                  smsResult = await sendSmsAlert(smsRecipients, `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`);
-                  console.log("[SMS] result:", JSON.stringify(smsResult), "to:", smsRecipients.join(", "));
+                  if (noSignal) {
+                    smsResult = { sent: false, queued: true, reason: "queued until back online" };
+                  } else {
+                    smsResult = await sendSmsAlert(smsRecipients, smsMessage);
+                    console.log("[SMS] result:", JSON.stringify(smsResult), "to:", smsRecipients.join(", "));
+                  }
                 } else {
                   console.warn("[SMS] Enabled but no phone numbers on file — nothing sent.");
                   smsResult = { sent: false, reason: "no numbers on file" };
@@ -3291,7 +3427,7 @@ export default function App() {
                 lookedFor: cleaningEmail,
                 sms: smsResult,
               });
-              const result = await sendOrQueueAlert({
+              const emailPayload = {
                 cleaning_email: recipients,
                 to_email: recipients,
                 email: recipients,
@@ -3310,10 +3446,24 @@ export default function App() {
                 stall: unitLabel,
                 business: biz,
                 time: new Date().toLocaleString(),
-              });
+              };
 
+              let result;
+              if (noSignal) {
+                queueFullReport({
+                  airtable: { extended: extendedFields, base: reportFields, minimal: minimalFields },
+                  email: emailPayload,
+                  sms: smsRecipients.length ? { recipients: smsRecipients, message: smsMessage } : null,
+                  routing: { unresolved: routingUnresolved, issues: reportIssues, cleaningEmail, locName, smsMessage },
+                });
+                result = { status: "offline" };
+              } else {
+                result = await sendOrQueueAlert(emailPayload);
+              }
+
+              setReportQueued(result.status === "offline");
               if (result.status === "sent") showToast("✅ Report sent! Team notified.", T.green);
-              else if (result.status === "offline") showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
+              else if (result.status === "offline") showToast("No signal. Report saved on this device and will send automatically when you are back online.", T.yellow);
               else showToast(`❌ Alert rejected: ${result.error} — report was saved to Airtable.`, T.red);
               setSending(false);
               setReportDone(true);
@@ -3325,9 +3475,12 @@ export default function App() {
           </>
         ) : (
           <div style={{ textAlign: "center", padding: "48px 0" }}>
-            <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>{tr(reportLang, "Report Sent!")}</h2>
-            {notifiedInfo && notifiedInfo.recipients.length > 0 && (
+            <div style={{ fontSize: 72, marginBottom: 16 }}>{reportQueued ? "📡" : "✅"}</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: reportQueued ? T.yellow : T.green, margin: "0 0 10px" }}>{reportQueued ? "Report saved on this device" : tr(reportLang, "Report Sent!")}</h2>
+            {reportQueued && (
+              <p style={{ fontSize: 13.5, color: T.muted, maxWidth: 420, margin: "0 auto 16px", lineHeight: 1.6 }}>No signal right now. It will send automatically when you are back online.</p>
+            )}
+            {!reportQueued && notifiedInfo && notifiedInfo.recipients.length > 0 && (
               <div style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", margin: "0 auto 16px", maxWidth: 420, textAlign: "left" }}>
                 <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>Notified</div>
                 {notifiedInfo.recipients.map(r => (
