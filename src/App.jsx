@@ -128,16 +128,6 @@ function queueReport(payload) {
   writeQueue(queue);
 }
 
-// v2 entry: the COMPLETE report — Airtable record, email alert, and SMS —
-// so a report filed in a dead zone produces all three on reconnect, not just
-// the email. `done` flags record which stages already succeeded so a partial
-// replay never sends the same alert twice.
-function queueFullReport(entry) {
-  const queue = readQueue();
-  queue.push({ v: 2, savedAt: Date.now(), done: { airtable: false, email: false, sms: false }, ...entry });
-  writeQueue(queue);
-}
-
 // The single sender — sends the alert via EmailJS.
 // The payload's cleaning_email maps to the {{cleaning_email}} template variable
 // (also sent as to_email and email so the template's "To Email" matches
@@ -164,81 +154,22 @@ async function sendOrQueueAlert(payload) {
   }
 }
 
-// Flush every queued report. Re-queues any that still fail.
-// Legacy entries ({ params }) are email-only and flush exactly as before.
-// v2 entries replay in order: Airtable record → email alert → SMS.
-// A single in-flight lock prevents the mount flush and the "online" event
-// (which can fire within the same second) from replaying one entry twice.
-let flushInFlight = false;
+// Flush every queued report back to Formspree. Re-queues any that still fail.
 async function flushQueue() {
-  if (flushInFlight) return 0;
-  flushInFlight = true;
-  try {
-    const queue = readQueue();
-    if (queue.length === 0) return 0;
-    const remaining = [];
-    let flushed = 0;
-    for (const entry of queue) {
-      if (!entry || entry.v !== 2) {
-        try { await postToFormspree(entry.params); flushed++; }
-        catch (e) { remaining.push(entry); }
-        continue;
-      }
-      const done = entry.done || { airtable: false, email: false, sms: false };
-      // Team routing could not be looked up offline — resolve it now so the
-      // alert reaches the owning team, not only the primary address.
-      if (entry.routing && entry.routing.unresolved) {
-        try {
-          const rt = entry.routing;
-          const looked = await fetchTeamRouting(rt.cleaningEmail, rt.locName);
-          if (looked) {
-            const routed = routeRecipients(rt.issues, { ...looked, clean: rt.cleaningEmail }, rt.cleaningEmail);
-            const recips = [...routed, MANAGEMENT_EMAIL].filter(Boolean).join(", ");
-            entry.email = { ...entry.email, cleaning_email: recips, to_email: recips, email: recips };
-            if (looked._smsEnabled) {
-              const primary = looked._primaryPhone || "";
-              const phones = routeRecipients(rt.issues, { ...(looked._phones || {}), clean: primary }, primary);
-              if (phones.length) entry.sms = { recipients: phones, message: rt.smsMessage };
-            }
-            entry.routing.unresolved = false;
-          }
-        } catch (e) {}
-      }
-      let ok = true;
-      // 1) Dashboard record — same progressive fallback as a live submit.
-      if (!done.airtable) {
-        const a = entry.airtable || {};
-        let r = a.extended ? await submitReportToAirtable(a.extended, "queued full") : { ok: false, netError: false };
-        if (!r.ok && a.base) r = await submitReportToAirtable(a.base, "queued base");
-        if (!r.ok && a.minimal) r = await submitReportToAirtable(a.minimal, "queued minimal");
-        if (r.ok) done.airtable = true;
-        else if (r.netError) ok = false; // still no connectivity — try again later
-        else { done.airtable = true; console.error("[Queue] Airtable rejected queued report on every fallback; alert will still send."); }
-      }
-      // 2) Email alert
-      if (ok && !done.email) {
-        try { await postToFormspree(entry.email); done.email = true; }
-        catch (e) { ok = false; }
-      }
-      // 3) SMS (only retried on a network error; a server rejection is final)
-      if (ok && !done.sms) {
-        if (entry.sms && Array.isArray(entry.sms.recipients) && entry.sms.recipients.length) {
-          const sr = await sendSmsAlert(entry.sms.recipients, entry.sms.message);
-          if (sr && sr.error === true) ok = false;
-          else done.sms = true;
-        } else {
-          done.sms = true;
-        }
-      }
-      entry.done = done;
-      if (ok && done.airtable && done.email && done.sms) flushed++;
-      else remaining.push(entry);
+  const queue = readQueue();
+  if (queue.length === 0) return 0;
+  const remaining = [];
+  let flushed = 0;
+  for (const entry of queue) {
+    try {
+      await postToFormspree(entry.params);
+      flushed++;
+    } catch (e) {
+      remaining.push(entry);
     }
-    writeQueue(remaining);
-    return flushed;
-  } finally {
-    flushInFlight = false;
   }
+  writeQueue(remaining);
+  return flushed;
 }
 
 // ── DESIGN TOKENS ──
@@ -374,12 +305,12 @@ const LANGS = [
 ];
 
 const TR = {
-  es: { "Safety & Hazards": "Seguridad y Peligros", "Security & Facilities": "Vigilancia e Instalaciones", "Maintenance & Repairs": "Mantenimiento y Reparaciones", "Cleaning & Sanitation": "Limpieza e Higiene", "Supplies": "Suministros", "Wet Floor / Spill": "Piso Mojado / Derrame", "Blocked Exit / Aisle": "Salida / Pasillo Bloqueado", "Trip / Fall Hazard": "Riesgo de Tropiezo / Caída", "Near-Miss / Incident": "Casi Accidente / Incidente", "PPE / Equipment Unsafe": "EPP / Equipo Inseguro", "Access / Door Issue": "Problema de Acceso / Puerta", "Property Damage": "Daño a la Propiedad", "Suspicious Activity": "Actividad Sospechosa", "Lighting Out / Flickering": "Luz Apagada / Parpadeante", "HVAC / Temperature Issue": "Problema de Clima / Temperatura", "Broken Fixture / Door": "Accesorio / Puerta Rota", "Equipment Issue": "Problema de Equipo", "Spill / Mess Needs Cleanup": "Derrame / Suciedad por Limpiar", "Restroom Needs Attention": "Baño Necesita Atención", "Trash / Bins Full": "Basura / Botes Llenos", "No Soap": "Sin Jabón", "No Paper Towels": "Sin Toallas de Papel", "No Toilet Paper": "Sin Papel Higiénico", "No Hand Sanitizer": "Sin Desinfectante", "Breakroom Restock": "Reabastecer Comedor", "Report a Facility Issue": "Reportar un Problema", "Select the issue(s). Takes 10 seconds.": "Seleccione el problema. Toma 10 segundos.", "Select one or more issues, then tap Send": "Seleccione y toque Enviar", "Other / Custom Issue": "Otro Problema", "Describe any other issue here...": "Describa el problema aquí...", "Add a Photo (optional)": "Agregar Foto (opcional)", "Take Photo": "Tomar Foto", "From Library": "De la Galería", "Send Report →": "Enviar Reporte →", "Sending...": "Enviando...", "Report Sent!": "¡Reporte Enviado!", "The team has been notified and is on the way.": "El equipo ha sido notificado y va en camino.", "Report Another Issue": "Reportar Otro Problema", "Speak": "Hablar", "Listening...": "Escuchando...", "Low": "Baja", "Medium": "Media", "High": "Alta", "AI Suggestion — review & confirm": "Sugerencia IA — revise y confirme", "Suggested severity": "Severidad sugerida", "Description (editable)": "Descripción (editable)", "Active Issues": "Problemas Activos", "Resolved": "Resueltos", "Fixed It": "Resuelto", "No active issues": "Sin problemas activos", "Dashboard": "Panel", "Manage": "Administrar", "Account": "Cuenta", "Refresh": "Actualizar", "Log Out": "Cerrar Sesión", "Language": "Idioma", "SupplyPing Dashboard": "Panel de SupplyPing", "Facility Operations": "Operaciones de Instalaciones", "All Clear — No Active Issues": "Todo en orden — sin problemas activos", "No action needed right now.": "No se requiere acción por ahora.", "{n} Active Issue Needs Attention": "{n} problema activo requiere atención", "{n} Active Issues Need Attention": "{n} problemas activos requieren atención", "Your team has been notified. Tap Fixed It when resolved.": "Tu equipo ha sido notificado. Toca Resuelto cuando esté solucionado.", "Open Issues": "Problemas Abiertos", "Total Reports": "Reportes Totales", "Auto-Refresh": "Actualización Automática", "Live": "En vivo", "Alert sent to": "Alerta enviada a", "Founding Pilot Feedback": "Comentarios del Piloto", "Your plan is free for 14 days — all we ask is your honest feedback.": "Tu plan es gratis por 14 días — solo pedimos tus comentarios honestos.", "Tell us anything — features, bugs, ideas, complaints...": "Cuéntanos lo que sea — funciones, errores, ideas, quejas...", "Send Feedback": "Enviar Comentarios", "Thank you! Your feedback was sent.": "¡Gracias! Tus comentarios fueron enviados.", "days left in your free trial": "días restantes de tu prueba gratuita", "Last day of your free trial": "Último día de tu prueba gratuita", "Trial ended — contact us to continue": "Prueba finalizada — contáctanos para continuar", "Photograph the hazard only — avoid people, screens, and personal information.": "Fotografíe solo el peligro — evite personas, pantallas e información personal." },
-  fr: { "Safety & Hazards": "Sécurité et Dangers", "Security & Facilities": "Sûreté et Installations", "Maintenance & Repairs": "Maintenance et Réparations", "Cleaning & Sanitation": "Nettoyage et Hygiène", "Supplies": "Fournitures", "Wet Floor / Spill": "Sol Mouillé / Déversement", "Blocked Exit / Aisle": "Sortie / Allée Bloquée", "Trip / Fall Hazard": "Risque de Chute", "Near-Miss / Incident": "Quasi-Accident / Incident", "PPE / Equipment Unsafe": "EPI / Équipement Dangereux", "Access / Door Issue": "Problème d'Accès / Porte", "Property Damage": "Dommage Matériel", "Suspicious Activity": "Activité Suspecte", "Lighting Out / Flickering": "Éclairage Éteint / Clignotant", "HVAC / Temperature Issue": "Problème CVC / Température", "Broken Fixture / Door": "Équipement / Porte Cassée", "Equipment Issue": "Problème d'Équipement", "Spill / Mess Needs Cleanup": "Déversement / Saleté à Nettoyer", "Restroom Needs Attention": "Toilettes à Vérifier", "Trash / Bins Full": "Poubelles Pleines", "No Soap": "Pas de Savon", "No Paper Towels": "Pas d'Essuie-tout", "No Toilet Paper": "Pas de Papier Toilette", "No Hand Sanitizer": "Pas de Gel Désinfectant", "Breakroom Restock": "Réappro Salle de Pause", "Report a Facility Issue": "Signaler un Problème", "Select the issue(s). Takes 10 seconds.": "Sélectionnez le problème. 10 secondes.", "Select one or more issues, then tap Send": "Sélectionnez puis appuyez Envoyer", "Other / Custom Issue": "Autre Problème", "Describe any other issue here...": "Décrivez le problème ici...", "Add a Photo (optional)": "Ajouter une Photo (optionnel)", "Take Photo": "Prendre une Photo", "From Library": "De la Galerie", "Send Report →": "Envoyer →", "Sending...": "Envoi...", "Report Sent!": "Signalement Envoyé !", "The team has been notified and is on the way.": "L'équipe a été notifiée et arrive.", "Report Another Issue": "Signaler un Autre Problème", "Speak": "Parler", "Listening...": "Écoute...", "Low": "Faible", "Medium": "Moyen", "High": "Élevé", "AI Suggestion — review & confirm": "Suggestion IA — vérifiez et confirmez", "Suggested severity": "Gravité suggérée", "Description (editable)": "Description (modifiable)", "Active Issues": "Problèmes Actifs", "Resolved": "Résolus", "Fixed It": "Résolu", "No active issues": "Aucun problème actif", "Dashboard": "Tableau de bord", "Manage": "Gérer", "Account": "Compte", "Refresh": "Actualiser", "Log Out": "Déconnexion", "Language": "Langue", "SupplyPing Dashboard": "Tableau de bord SupplyPing", "Facility Operations": "Opérations des Installations", "All Clear — No Active Issues": "Tout est en ordre — aucun problème actif", "No action needed right now.": "Aucune action requise pour le moment.", "{n} Active Issue Needs Attention": "{n} problème actif nécessite une attention", "{n} Active Issues Need Attention": "{n} problèmes actifs nécessitent une attention", "Your team has been notified. Tap Fixed It when resolved.": "Votre équipe a été notifiée. Appuyez sur Résolu une fois terminé.", "Open Issues": "Problèmes Ouverts", "Total Reports": "Total des Signalements", "Auto-Refresh": "Actualisation Auto", "Live": "En direct", "Alert sent to": "Alerte envoyée à", "Founding Pilot Feedback": "Retour sur le Pilote", "Your plan is free for 14 days — all we ask is your honest feedback.": "Votre plan est gratuit pendant 14 jours — nous demandons seulement vos retours honnêtes.", "Tell us anything — features, bugs, ideas, complaints...": "Dites-nous tout — fonctionnalités, bugs, idées, plaintes...", "Send Feedback": "Envoyer", "Thank you! Your feedback was sent.": "Merci ! Votre retour a été envoyé.", "days left in your free trial": "jours restants dans votre essai gratuit", "Last day of your free trial": "Dernier jour de votre essai gratuit", "Trial ended — contact us to continue": "Essai terminé — contactez-nous pour continuer", "Photograph the hazard only — avoid people, screens, and personal information.": "Photographiez uniquement le danger — évitez les personnes, les écrans et les informations personnelles." },
-  ar: { "Safety & Hazards": "السلامة والمخاطر", "Security & Facilities": "الأمن والمرافق", "Maintenance & Repairs": "الصيانة والإصلاحات", "Cleaning & Sanitation": "التنظيف والنظافة", "Supplies": "المستلزمات", "Wet Floor / Spill": "أرضية مبللة / انسكاب", "Blocked Exit / Aisle": "مخرج / ممر مسدود", "Trip / Fall Hazard": "خطر التعثر / السقوط", "Near-Miss / Incident": "حادث وشيك / واقعة", "PPE / Equipment Unsafe": "معدات وقاية غير آمنة", "Access / Door Issue": "مشكلة دخول / باب", "Property Damage": "أضرار بالممتلكات", "Suspicious Activity": "نشاط مشبوه", "Lighting Out / Flickering": "إضاءة مطفأة / وامضة", "HVAC / Temperature Issue": "مشكلة تكييف / حرارة", "Broken Fixture / Door": "تركيبات / باب مكسور", "Equipment Issue": "مشكلة معدات", "Spill / Mess Needs Cleanup": "انسكاب يحتاج تنظيف", "Restroom Needs Attention": "دورة المياه تحتاج عناية", "Trash / Bins Full": "سلال القمامة ممتلئة", "No Soap": "لا يوجد صابون", "No Paper Towels": "لا توجد مناشف ورقية", "No Toilet Paper": "لا يوجد ورق تواليت", "No Hand Sanitizer": "لا يوجد معقم", "Breakroom Restock": "تزويد غرفة الاستراحة", "Report a Facility Issue": "الإبلاغ عن مشكلة", "Select the issue(s). Takes 10 seconds.": "اختر المشكلة. يستغرق 10 ثوانٍ.", "Select one or more issues, then tap Send": "اختر ثم اضغط إرسال", "Other / Custom Issue": "مشكلة أخرى", "Describe any other issue here...": "صف المشكلة هنا...", "Add a Photo (optional)": "أضف صورة (اختياري)", "Take Photo": "التقط صورة", "From Library": "من المعرض", "Send Report →": "إرسال البلاغ", "Sending...": "جارٍ الإرسال...", "Report Sent!": "تم إرسال البلاغ!", "The team has been notified and is on the way.": "تم إخطار الفريق وهو في الطريق.", "Report Another Issue": "الإبلاغ عن مشكلة أخرى", "Speak": "تحدث", "Listening...": "يستمع...", "Low": "منخفض", "Medium": "متوسط", "High": "مرتفع", "AI Suggestion — review & confirm": "اقتراح الذكاء الاصطناعي — راجع وأكد", "Suggested severity": "الخطورة المقترحة", "Description (editable)": "الوصف (قابل للتعديل)", "Active Issues": "المشكلات النشطة", "Resolved": "تم الحل", "Fixed It": "تم الإصلاح", "No active issues": "لا توجد مشكلات نشطة", "Dashboard": "لوحة التحكم", "Manage": "إدارة", "Account": "الحساب", "Refresh": "تحديث", "Log Out": "تسجيل الخروج", "Language": "اللغة", "SupplyPing Dashboard": "لوحة تحكم SupplyPing", "Facility Operations": "عمليات المرافق", "All Clear — No Active Issues": "كل شيء على ما يرام — لا توجد مشكلات نشطة", "No action needed right now.": "لا يلزم اتخاذ أي إجراء الآن.", "{n} Active Issue Needs Attention": "{n} مشكلة نشطة تحتاج إلى انتباه", "{n} Active Issues Need Attention": "{n} مشكلات نشطة تحتاج إلى انتباه", "Your team has been notified. Tap Fixed It when resolved.": "تم إخطار فريقك. اضغط على تم الإصلاح عند الانتهاء.", "Open Issues": "المشكلات المفتوحة", "Total Reports": "إجمالي البلاغات", "Auto-Refresh": "تحديث تلقائي", "Live": "مباشر", "Alert sent to": "تم إرسال التنبيه إلى", "Founding Pilot Feedback": "ملاحظات البرنامج التجريبي", "Your plan is free for 14 days — all we ask is your honest feedback.": "خطتك مجانية لمدة 14 يومًا — كل ما نطلبه هو ملاحظاتك الصادقة.", "Tell us anything — features, bugs, ideas, complaints...": "أخبرنا بأي شيء — ميزات، أخطاء، أفكار، شكاوى...", "Send Feedback": "إرسال الملاحظات", "Thank you! Your feedback was sent.": "شكرًا لك! تم إرسال ملاحظاتك.", "days left in your free trial": "أيام متبقية في تجربتك المجانية", "Last day of your free trial": "آخر يوم في تجربتك المجانية", "Trial ended — contact us to continue": "انتهت التجربة — تواصل معنا للمتابعة", "Photograph the hazard only — avoid people, screens, and personal information.": "صوّر الخطر فقط — تجنب الأشخاص والشاشات والمعلومات الشخصية." },
-  bn: { "Safety & Hazards": "নিরাপত্তা ও ঝুঁকি", "Security & Facilities": "সিকিউরিটি ও ফ্যাসিলিটি", "Maintenance & Repairs": "রক্ষণাবেক্ষণ ও মেরামত", "Cleaning & Sanitation": "পরিচ্ছন্নতা ও স্যানিটেশন", "Supplies": "সরবরাহ", "Wet Floor / Spill": "ভেজা মেঝে / ছলকে পড়া", "Blocked Exit / Aisle": "অবরুদ্ধ প্রস্থান / পথ", "Trip / Fall Hazard": "হোঁচট / পড়ার ঝুঁকি", "Near-Miss / Incident": "প্রায়-দুর্ঘটনা / ঘটনা", "PPE / Equipment Unsafe": "পিপিই / অনিরাপদ সরঞ্জাম", "Access / Door Issue": "প্রবেশ / দরজার সমস্যা", "Property Damage": "সম্পত্তির ক্ষতি", "Suspicious Activity": "সন্দেহজনক কার্যকলাপ", "Lighting Out / Flickering": "লাইট নষ্ট / ঝিকমিক", "HVAC / Temperature Issue": "এসি / তাপমাত্রার সমস্যা", "Broken Fixture / Door": "ভাঙা ফিক্সচার / দরজা", "Equipment Issue": "সরঞ্জামের সমস্যা", "Spill / Mess Needs Cleanup": "পরিষ্কার প্রয়োজন", "Restroom Needs Attention": "টয়লেটে মনোযোগ প্রয়োজন", "Trash / Bins Full": "ময়লার ঝুড়ি ভর্তি", "No Soap": "সাবান নেই", "No Paper Towels": "কাগজের তোয়ালে নেই", "No Toilet Paper": "টয়লেট পেপার নেই", "No Hand Sanitizer": "স্যানিটাইজার নেই", "Breakroom Restock": "ব্রেকরুম রিস্টক", "Report a Facility Issue": "সমস্যা রিপোর্ট করুন", "Select the issue(s). Takes 10 seconds.": "সমস্যা নির্বাচন করুন। ১০ সেকেন্ড লাগে।", "Select one or more issues, then tap Send": "নির্বাচন করে পাঠান চাপুন", "Other / Custom Issue": "অন্যান্য সমস্যা", "Describe any other issue here...": "সমস্যাটি এখানে লিখুন...", "Add a Photo (optional)": "ছবি যোগ করুন (ঐচ্ছিক)", "Take Photo": "ছবি তুলুন", "From Library": "গ্যালারি থেকে", "Send Report →": "রিপোর্ট পাঠান →", "Sending...": "পাঠানো হচ্ছে...", "Report Sent!": "রিপোর্ট পাঠানো হয়েছে!", "The team has been notified and is on the way.": "টিমকে জানানো হয়েছে, তারা আসছে।", "Report Another Issue": "আরেকটি সমস্যা রিপোর্ট করুন", "Speak": "বলুন", "Listening...": "শোনা হচ্ছে...", "Low": "কম", "Medium": "মাঝারি", "High": "উচ্চ", "AI Suggestion — review & confirm": "এআই পরামর্শ — যাচাই করুন", "Suggested severity": "প্রস্তাবিত মাত্রা", "Description (editable)": "বিবরণ (সম্পাদনাযোগ্য)", "Active Issues": "সক্রিয় সমস্যা", "Resolved": "সমাধান হয়েছে", "Fixed It": "সমাধান হয়েছে", "No active issues": "কোনো সক্রিয় সমস্যা নেই", "Dashboard": "ড্যাশবোর্ড", "Manage": "পরিচালনা", "Account": "অ্যাকাউন্ট", "Refresh": "রিফ্রেশ", "Log Out": "লগ আউট", "Language": "ভাষা", "SupplyPing Dashboard": "SupplyPing ড্যাশবোর্ড", "Facility Operations": "সুবিধা পরিচালনা", "All Clear — No Active Issues": "সব ঠিক আছে — কোনো সক্রিয় সমস্যা নেই", "No action needed right now.": "এখন কোনো পদক্ষেপের প্রয়োজন নেই।", "{n} Active Issue Needs Attention": "{n}টি সক্রিয় সমস্যা মনোযোগ চায়", "{n} Active Issues Need Attention": "{n}টি সক্রিয় সমস্যা মনোযোগ চায়", "Your team has been notified. Tap Fixed It when resolved.": "আপনার টিমকে জানানো হয়েছে। সমাধান হলে সমাধান হয়েছে চাপুন।", "Open Issues": "খোলা সমস্যা", "Total Reports": "মোট রিপোর্ট", "Auto-Refresh": "স্বয়ংক্রিয় রিফ্রেশ", "Live": "লাইভ", "Alert sent to": "সতর্কতা পাঠানো হয়েছে", "Founding Pilot Feedback": "পাইলট প্রতিক্রিয়া", "Your plan is free for 14 days — all we ask is your honest feedback.": "আপনার প্ল্যান ১৪ দিন বিনামূল্যে — আমরা শুধু আপনার সৎ মতামত চাই।", "Tell us anything — features, bugs, ideas, complaints...": "আমাদের যেকোনো কিছু বলুন — ফিচার, ত্রুটি, ধারণা, অভিযোগ...", "Send Feedback": "মতামত পাঠান", "Thank you! Your feedback was sent.": "ধন্যবাদ! আপনার মতামত পাঠানো হয়েছে।", "days left in your free trial": "দিন বাকি আপনার ফ্রি ট্রায়ালে", "Last day of your free trial": "আপনার ফ্রি ট্রায়ালের শেষ দিন", "Trial ended — contact us to continue": "ট্রায়াল শেষ — চালিয়ে যেতে যোগাযোগ করুন", "Photograph the hazard only — avoid people, screens, and personal information.": "শুধু ঝুঁকির ছবি তুলুন — মানুষ, স্ক্রিন ও ব্যক্তিগত তথ্য এড়িয়ে চলুন।" },
-  hi: { "Safety & Hazards": "सुरक्षा और खतरे", "Security & Facilities": "सिक्योरिटी और सुविधाएँ", "Maintenance & Repairs": "रखरखाव और मरम्मत", "Cleaning & Sanitation": "सफ़ाई और स्वच्छता", "Supplies": "सामग्री", "Wet Floor / Spill": "गीला फ़र्श / रिसाव", "Blocked Exit / Aisle": "अवरुद्ध निकास / गलियारा", "Trip / Fall Hazard": "ठोकर / गिरने का खतरा", "Near-Miss / Incident": "निकट-चूक / घटना", "PPE / Equipment Unsafe": "पीपीई / असुरक्षित उपकरण", "Access / Door Issue": "प्रवेश / दरवाज़े की समस्या", "Property Damage": "संपत्ति क्षति", "Suspicious Activity": "संदिग्ध गतिविधि", "Lighting Out / Flickering": "लाइट बंद / टिमटिमाती", "HVAC / Temperature Issue": "एसी / तापमान समस्या", "Broken Fixture / Door": "टूटा उपकरण / दरवाज़ा", "Equipment Issue": "उपकरण समस्या", "Spill / Mess Needs Cleanup": "सफ़ाई की ज़रूरत", "Restroom Needs Attention": "शौचालय पर ध्यान दें", "Trash / Bins Full": "कूड़ेदान भरे हैं", "No Soap": "साबुन नहीं है", "No Paper Towels": "पेपर टॉवल नहीं है", "No Toilet Paper": "टॉयलेट पेपर नहीं है", "No Hand Sanitizer": "सैनिटाइज़र नहीं है", "Breakroom Restock": "ब्रेकरूम रीस्टॉक", "Report a Facility Issue": "समस्या रिपोर्ट करें", "Select the issue(s). Takes 10 seconds.": "समस्या चुनें। 10 सेकंड लगते हैं।", "Select one or more issues, then tap Send": "चुनें और भेजें दबाएँ", "Other / Custom Issue": "अन्य समस्या", "Describe any other issue here...": "समस्या यहाँ लिखें...", "Add a Photo (optional)": "फ़ोटो जोड़ें (वैकल्पिक)", "Take Photo": "फ़ोटो लें", "From Library": "गैलरी से", "Send Report →": "रिपोर्ट भेजें →", "Sending...": "भेजा जा रहा है...", "Report Sent!": "रिपोर्ट भेज दी गई!", "The team has been notified and is on the way.": "टीम को सूचित कर दिया गया है।", "Report Another Issue": "एक और समस्या रिपोर्ट करें", "Speak": "बोलें", "Listening...": "सुन रहा है...", "Low": "कम", "Medium": "मध्यम", "High": "उच्च", "AI Suggestion — review & confirm": "एआई सुझाव — जाँचें और पुष्टि करें", "Suggested severity": "सुझाई गई गंभीरता", "Description (editable)": "विवरण (संपादन योग्य)", "Active Issues": "सक्रिय समस्याएँ", "Resolved": "हल हो गया", "Fixed It": "ठीक हो गया", "No active issues": "कोई सक्रिय समस्या नहीं", "Dashboard": "डैशबोर्ड", "Manage": "प्रबंधित करें", "Account": "खाता", "Refresh": "रिफ्रेश", "Log Out": "लॉग आउट", "Language": "भाषा", "SupplyPing Dashboard": "SupplyPing डैशबोर्ड", "Facility Operations": "सुविधा संचालन", "All Clear — No Active Issues": "सब ठीक है — कोई सक्रिय समस्या नहीं", "No action needed right now.": "अभी कोई कार्रवाई आवश्यक नहीं।", "{n} Active Issue Needs Attention": "{n} सक्रिय समस्या पर ध्यान दें", "{n} Active Issues Need Attention": "{n} सक्रिय समस्याओं पर ध्यान दें", "Your team has been notified. Tap Fixed It when resolved.": "आपकी टीम को सूचित कर दिया गया है। हल होने पर ठीक हो गया दबाएँ।", "Open Issues": "खुली समस्याएँ", "Total Reports": "कुल रिपोर्ट", "Auto-Refresh": "स्वतः रिफ्रेश", "Live": "लाइव", "Alert sent to": "अलर्ट भेजा गया", "Founding Pilot Feedback": "पायलट फ़ीडबैक", "Your plan is free for 14 days — all we ask is your honest feedback.": "आपकी योजना 14 दिन नि:शुल्क है — हम केवल आपकी ईमानदार प्रतिक्रिया चाहते हैं।", "Tell us anything — features, bugs, ideas, complaints...": "हमें कुछ भी बताएं — सुविधाएँ, बग, विचार, शिकायतें...", "Send Feedback": "फ़ीडबैक भेजें", "Thank you! Your feedback was sent.": "धन्यवाद! आपकी प्रतिक्रिया भेज दी गई।", "days left in your free trial": "दिन शेष आपके नि:शुल्क ट्रायल में", "Last day of your free trial": "आपके नि:शुल्क ट्रायल का अंतिम दिन", "Trial ended — contact us to continue": "ट्रायल समाप्त — जारी रखने के लिए संपर्क करें", "Photograph the hazard only — avoid people, screens, and personal information.": "केवल खतरे की फ़ोटो लें — लोगों, स्क्रीन और व्यक्तिगत जानकारी से बचें।" },
-  zh: { "Safety & Hazards": "安全与隐患", "Security & Facilities": "安保与设施", "Maintenance & Repairs": "维护与维修", "Cleaning & Sanitation": "清洁与卫生", "Supplies": "物资", "Wet Floor / Spill": "地面湿滑 / 洒漏", "Blocked Exit / Aisle": "出口 / 通道堵塞", "Trip / Fall Hazard": "绊倒 / 跌倒风险", "Near-Miss / Incident": "险情 / 事故", "PPE / Equipment Unsafe": "防护装备不安全", "Access / Door Issue": "门禁 / 门的问题", "Property Damage": "财产损坏", "Suspicious Activity": "可疑活动", "Lighting Out / Flickering": "灯光故障 / 闪烁", "HVAC / Temperature Issue": "空调 / 温度问题", "Broken Fixture / Door": "设施 / 门损坏", "Equipment Issue": "设备问题", "Spill / Mess Needs Cleanup": "需要清理", "Restroom Needs Attention": "洗手间需要处理", "Trash / Bins Full": "垃圾桶已满", "No Soap": "没有肥皂", "No Paper Towels": "没有纸巾", "No Toilet Paper": "没有厕纸", "No Hand Sanitizer": "没有消毒液", "Breakroom Restock": "休息室补货", "Report a Facility Issue": "报告设施问题", "Select the issue(s). Takes 10 seconds.": "选择问题,只需10秒。", "Select one or more issues, then tap Send": "选择后点击发送", "Other / Custom Issue": "其他问题", "Describe any other issue here...": "在此描述问题...", "Add a Photo (optional)": "添加照片(可选)", "Take Photo": "拍照", "From Library": "从相册选择", "Send Report →": "发送报告 →", "Sending...": "发送中...", "Report Sent!": "报告已发送!", "The team has been notified and is on the way.": "团队已收到通知,正在处理。", "Report Another Issue": "报告另一个问题", "Speak": "说话", "Listening...": "正在听...", "Low": "低", "Medium": "中", "High": "高", "AI Suggestion — review & confirm": "AI 建议 — 请确认", "Suggested severity": "建议严重程度", "Description (editable)": "描述(可编辑)", "Active Issues": "待处理问题", "Resolved": "已解决", "Fixed It": "已修复", "No active issues": "暂无待处理问题", "Dashboard": "仪表板", "Manage": "管理", "Account": "账户", "Refresh": "刷新", "Log Out": "退出登录", "Language": "语言", "SupplyPing Dashboard": "SupplyPing 仪表板", "Facility Operations": "设施运营", "All Clear — No Active Issues": "一切正常 — 没有待处理问题", "No action needed right now.": "目前无需处理。", "{n} Active Issue Needs Attention": "{n} 个待处理问题需要关注", "{n} Active Issues Need Attention": "{n} 个待处理问题需要关注", "Your team has been notified. Tap Fixed It when resolved.": "已通知您的团队。解决后请点击已修复。", "Open Issues": "待处理问题", "Total Reports": "报告总数", "Auto-Refresh": "自动刷新", "Live": "实时", "Alert sent to": "警报已发送至", "Founding Pilot Feedback": "试用反馈", "Your plan is free for 14 days — all we ask is your honest feedback.": "您的方案14天免费 — 我们只需要您的真实反馈。", "Tell us anything — features, bugs, ideas, complaints...": "告诉我们任何事 — 功能、错误、想法、投诉...", "Send Feedback": "发送反馈", "Thank you! Your feedback was sent.": "谢谢！您的反馈已发送。", "days left in your free trial": "天免费试用剩余", "Last day of your free trial": "免费试用的最后一天", "Trial ended — contact us to continue": "试用已结束 — 请联系我们继续", "Photograph the hazard only — avoid people, screens, and personal information.": "只拍摄危险本身 — 避免拍到人员、屏幕和个人信息。" },
+  es: { "Safety & Hazards": "Seguridad y Peligros", "Security & Facilities": "Vigilancia e Instalaciones", "Maintenance & Repairs": "Mantenimiento y Reparaciones", "Cleaning & Sanitation": "Limpieza e Higiene", "Supplies": "Suministros", "Wet Floor / Spill": "Piso Mojado / Derrame", "Blocked Exit / Aisle": "Salida / Pasillo Bloqueado", "Trip / Fall Hazard": "Riesgo de Tropiezo / Caída", "Near-Miss / Incident": "Casi Accidente / Incidente", "PPE / Equipment Unsafe": "EPP / Equipo Inseguro", "Access / Door Issue": "Problema de Acceso / Puerta", "Property Damage": "Daño a la Propiedad", "Suspicious Activity": "Actividad Sospechosa", "Lighting Out / Flickering": "Luz Apagada / Parpadeante", "HVAC / Temperature Issue": "Problema de Clima / Temperatura", "Broken Fixture / Door": "Accesorio / Puerta Rota", "Equipment Issue": "Problema de Equipo", "Spill / Mess Needs Cleanup": "Derrame / Suciedad por Limpiar", "Restroom Needs Attention": "Baño Necesita Atención", "Trash / Bins Full": "Basura / Botes Llenos", "No Soap": "Sin Jabón", "No Paper Towels": "Sin Toallas de Papel", "No Toilet Paper": "Sin Papel Higiénico", "No Hand Sanitizer": "Sin Desinfectante", "Breakroom Restock": "Reabastecer Comedor", "Report a Facility Issue": "Reportar un Problema", "Select the issue(s). Takes 10 seconds.": "Seleccione el problema. Toma 10 segundos.", "Select one or more issues, then tap Send": "Seleccione y toque Enviar", "Other / Custom Issue": "Otro Problema", "Describe any other issue here...": "Describa el problema aquí...", "Add a Photo (optional)": "Agregar Foto (opcional)", "Take Photo": "Tomar Foto", "From Library": "De la Galería", "Send Report →": "Enviar Reporte →", "Sending...": "Enviando...", "Report Sent!": "¡Reporte Enviado!", "The team has been notified and is on the way.": "El equipo ha sido notificado y va en camino.", "Report Another Issue": "Reportar Otro Problema", "Speak": "Hablar", "Listening...": "Escuchando...", "Low": "Baja", "Medium": "Media", "High": "Alta", "AI Suggestion — review & confirm": "Sugerencia IA — revise y confirme", "Suggested severity": "Severidad sugerida", "Description (editable)": "Descripción (editable)", "Active Issues": "Problemas Activos", "Resolved": "Resueltos", "Fixed It": "Resuelto", "No active issues": "Sin problemas activos", "Dashboard": "Panel", "Manage": "Administrar", "Account": "Cuenta", "Refresh": "Actualizar", "Log Out": "Cerrar Sesión", "Language": "Idioma", "SupplyPing Dashboard": "Panel de SupplyPing", "Facility Operations": "Operaciones de Instalaciones", "All Clear — No Active Issues": "Todo en orden — sin problemas activos", "No action needed right now.": "No se requiere acción por ahora.", "{n} Active Issue Needs Attention": "{n} problema activo requiere atención", "{n} Active Issues Need Attention": "{n} problemas activos requieren atención", "Your team has been notified. Tap Fixed It when resolved.": "Tu equipo ha sido notificado. Toca Resuelto cuando esté solucionado.", "Open Issues": "Problemas Abiertos", "Total Reports": "Reportes Totales", "Auto-Refresh": "Actualización Automática", "Live": "En vivo", "Alert sent to": "Alerta enviada a", "Founding Pilot Feedback": "Comentarios del Piloto", "Your pilot is free for 30 days. All we ask is your honest feedback.": "Tu piloto es gratis por 30 días. Solo pedimos tus comentarios honestos.", "Tell us anything — features, bugs, ideas, complaints...": "Cuéntanos lo que sea — funciones, errores, ideas, quejas...", "Send Feedback": "Enviar Comentarios", "Thank you! Your feedback was sent.": "¡Gracias! Tus comentarios fueron enviados.", "days left in your free pilot": "días restantes de tu piloto gratuito", "Last day of your free pilot": "Último día de tu piloto gratuito", "Pilot ended — contact us to continue": "Piloto finalizado — contáctanos para continuar", "Photograph the hazard only — avoid people, screens, and personal information.": "Fotografíe solo el peligro — evite personas, pantallas e información personal." },
+  fr: { "Safety & Hazards": "Sécurité et Dangers", "Security & Facilities": "Sûreté et Installations", "Maintenance & Repairs": "Maintenance et Réparations", "Cleaning & Sanitation": "Nettoyage et Hygiène", "Supplies": "Fournitures", "Wet Floor / Spill": "Sol Mouillé / Déversement", "Blocked Exit / Aisle": "Sortie / Allée Bloquée", "Trip / Fall Hazard": "Risque de Chute", "Near-Miss / Incident": "Quasi-Accident / Incident", "PPE / Equipment Unsafe": "EPI / Équipement Dangereux", "Access / Door Issue": "Problème d'Accès / Porte", "Property Damage": "Dommage Matériel", "Suspicious Activity": "Activité Suspecte", "Lighting Out / Flickering": "Éclairage Éteint / Clignotant", "HVAC / Temperature Issue": "Problème CVC / Température", "Broken Fixture / Door": "Équipement / Porte Cassée", "Equipment Issue": "Problème d'Équipement", "Spill / Mess Needs Cleanup": "Déversement / Saleté à Nettoyer", "Restroom Needs Attention": "Toilettes à Vérifier", "Trash / Bins Full": "Poubelles Pleines", "No Soap": "Pas de Savon", "No Paper Towels": "Pas d'Essuie-tout", "No Toilet Paper": "Pas de Papier Toilette", "No Hand Sanitizer": "Pas de Gel Désinfectant", "Breakroom Restock": "Réappro Salle de Pause", "Report a Facility Issue": "Signaler un Problème", "Select the issue(s). Takes 10 seconds.": "Sélectionnez le problème. 10 secondes.", "Select one or more issues, then tap Send": "Sélectionnez puis appuyez Envoyer", "Other / Custom Issue": "Autre Problème", "Describe any other issue here...": "Décrivez le problème ici...", "Add a Photo (optional)": "Ajouter une Photo (optionnel)", "Take Photo": "Prendre une Photo", "From Library": "De la Galerie", "Send Report →": "Envoyer →", "Sending...": "Envoi...", "Report Sent!": "Signalement Envoyé !", "The team has been notified and is on the way.": "L'équipe a été notifiée et arrive.", "Report Another Issue": "Signaler un Autre Problème", "Speak": "Parler", "Listening...": "Écoute...", "Low": "Faible", "Medium": "Moyen", "High": "Élevé", "AI Suggestion — review & confirm": "Suggestion IA — vérifiez et confirmez", "Suggested severity": "Gravité suggérée", "Description (editable)": "Description (modifiable)", "Active Issues": "Problèmes Actifs", "Resolved": "Résolus", "Fixed It": "Résolu", "No active issues": "Aucun problème actif", "Dashboard": "Tableau de bord", "Manage": "Gérer", "Account": "Compte", "Refresh": "Actualiser", "Log Out": "Déconnexion", "Language": "Langue", "SupplyPing Dashboard": "Tableau de bord SupplyPing", "Facility Operations": "Opérations des Installations", "All Clear — No Active Issues": "Tout est en ordre — aucun problème actif", "No action needed right now.": "Aucune action requise pour le moment.", "{n} Active Issue Needs Attention": "{n} problème actif nécessite une attention", "{n} Active Issues Need Attention": "{n} problèmes actifs nécessitent une attention", "Your team has been notified. Tap Fixed It when resolved.": "Votre équipe a été notifiée. Appuyez sur Résolu une fois terminé.", "Open Issues": "Problèmes Ouverts", "Total Reports": "Total des Signalements", "Auto-Refresh": "Actualisation Auto", "Live": "En direct", "Alert sent to": "Alerte envoyée à", "Founding Pilot Feedback": "Retour sur le Pilote", "Your pilot is free for 30 days. All we ask is your honest feedback.": "Votre pilote est gratuit pendant 30 jours. Nous demandons seulement vos retours honnêtes.", "Tell us anything — features, bugs, ideas, complaints...": "Dites-nous tout — fonctionnalités, bugs, idées, plaintes...", "Send Feedback": "Envoyer", "Thank you! Your feedback was sent.": "Merci ! Votre retour a été envoyé.", "days left in your free pilot": "jours restants dans votre pilote gratuit", "Last day of your free pilot": "Dernier jour de votre pilote gratuit", "Pilot ended — contact us to continue": "Pilote terminé — contactez-nous pour continuer", "Photograph the hazard only — avoid people, screens, and personal information.": "Photographiez uniquement le danger — évitez les personnes, les écrans et les informations personnelles." },
+  ar: { "Safety & Hazards": "السلامة والمخاطر", "Security & Facilities": "الأمن والمرافق", "Maintenance & Repairs": "الصيانة والإصلاحات", "Cleaning & Sanitation": "التنظيف والنظافة", "Supplies": "المستلزمات", "Wet Floor / Spill": "أرضية مبللة / انسكاب", "Blocked Exit / Aisle": "مخرج / ممر مسدود", "Trip / Fall Hazard": "خطر التعثر / السقوط", "Near-Miss / Incident": "حادث وشيك / واقعة", "PPE / Equipment Unsafe": "معدات وقاية غير آمنة", "Access / Door Issue": "مشكلة دخول / باب", "Property Damage": "أضرار بالممتلكات", "Suspicious Activity": "نشاط مشبوه", "Lighting Out / Flickering": "إضاءة مطفأة / وامضة", "HVAC / Temperature Issue": "مشكلة تكييف / حرارة", "Broken Fixture / Door": "تركيبات / باب مكسور", "Equipment Issue": "مشكلة معدات", "Spill / Mess Needs Cleanup": "انسكاب يحتاج تنظيف", "Restroom Needs Attention": "دورة المياه تحتاج عناية", "Trash / Bins Full": "سلال القمامة ممتلئة", "No Soap": "لا يوجد صابون", "No Paper Towels": "لا توجد مناشف ورقية", "No Toilet Paper": "لا يوجد ورق تواليت", "No Hand Sanitizer": "لا يوجد معقم", "Breakroom Restock": "تزويد غرفة الاستراحة", "Report a Facility Issue": "الإبلاغ عن مشكلة", "Select the issue(s). Takes 10 seconds.": "اختر المشكلة. يستغرق 10 ثوانٍ.", "Select one or more issues, then tap Send": "اختر ثم اضغط إرسال", "Other / Custom Issue": "مشكلة أخرى", "Describe any other issue here...": "صف المشكلة هنا...", "Add a Photo (optional)": "أضف صورة (اختياري)", "Take Photo": "التقط صورة", "From Library": "من المعرض", "Send Report →": "إرسال البلاغ", "Sending...": "جارٍ الإرسال...", "Report Sent!": "تم إرسال البلاغ!", "The team has been notified and is on the way.": "تم إخطار الفريق وهو في الطريق.", "Report Another Issue": "الإبلاغ عن مشكلة أخرى", "Speak": "تحدث", "Listening...": "يستمع...", "Low": "منخفض", "Medium": "متوسط", "High": "مرتفع", "AI Suggestion — review & confirm": "اقتراح الذكاء الاصطناعي — راجع وأكد", "Suggested severity": "الخطورة المقترحة", "Description (editable)": "الوصف (قابل للتعديل)", "Active Issues": "المشكلات النشطة", "Resolved": "تم الحل", "Fixed It": "تم الإصلاح", "No active issues": "لا توجد مشكلات نشطة", "Dashboard": "لوحة التحكم", "Manage": "إدارة", "Account": "الحساب", "Refresh": "تحديث", "Log Out": "تسجيل الخروج", "Language": "اللغة", "SupplyPing Dashboard": "لوحة تحكم SupplyPing", "Facility Operations": "عمليات المرافق", "All Clear — No Active Issues": "كل شيء على ما يرام — لا توجد مشكلات نشطة", "No action needed right now.": "لا يلزم اتخاذ أي إجراء الآن.", "{n} Active Issue Needs Attention": "{n} مشكلة نشطة تحتاج إلى انتباه", "{n} Active Issues Need Attention": "{n} مشكلات نشطة تحتاج إلى انتباه", "Your team has been notified. Tap Fixed It when resolved.": "تم إخطار فريقك. اضغط على تم الإصلاح عند الانتهاء.", "Open Issues": "المشكلات المفتوحة", "Total Reports": "إجمالي البلاغات", "Auto-Refresh": "تحديث تلقائي", "Live": "مباشر", "Alert sent to": "تم إرسال التنبيه إلى", "Founding Pilot Feedback": "ملاحظات البرنامج التجريبي", "Your pilot is free for 30 days. All we ask is your honest feedback.": "برنامجك التجريبي مجاني لمدة 30 يومًا. كل ما نطلبه هو ملاحظاتك الصادقة.", "Tell us anything — features, bugs, ideas, complaints...": "أخبرنا بأي شيء — ميزات، أخطاء، أفكار، شكاوى...", "Send Feedback": "إرسال الملاحظات", "Thank you! Your feedback was sent.": "شكرًا لك! تم إرسال ملاحظاتك.", "days left in your free pilot": "أيام متبقية في برنامجك التجريبي المجاني", "Last day of your free pilot": "آخر يوم في برنامجك التجريبي المجاني", "Pilot ended — contact us to continue": "انتهى البرنامج التجريبي — تواصل معنا للمتابعة", "Photograph the hazard only — avoid people, screens, and personal information.": "صوّر الخطر فقط — تجنب الأشخاص والشاشات والمعلومات الشخصية." },
+  bn: { "Safety & Hazards": "নিরাপত্তা ও ঝুঁকি", "Security & Facilities": "সিকিউরিটি ও ফ্যাসিলিটি", "Maintenance & Repairs": "রক্ষণাবেক্ষণ ও মেরামত", "Cleaning & Sanitation": "পরিচ্ছন্নতা ও স্যানিটেশন", "Supplies": "সরবরাহ", "Wet Floor / Spill": "ভেজা মেঝে / ছলকে পড়া", "Blocked Exit / Aisle": "অবরুদ্ধ প্রস্থান / পথ", "Trip / Fall Hazard": "হোঁচট / পড়ার ঝুঁকি", "Near-Miss / Incident": "প্রায়-দুর্ঘটনা / ঘটনা", "PPE / Equipment Unsafe": "পিপিই / অনিরাপদ সরঞ্জাম", "Access / Door Issue": "প্রবেশ / দরজার সমস্যা", "Property Damage": "সম্পত্তির ক্ষতি", "Suspicious Activity": "সন্দেহজনক কার্যকলাপ", "Lighting Out / Flickering": "লাইট নষ্ট / ঝিকমিক", "HVAC / Temperature Issue": "এসি / তাপমাত্রার সমস্যা", "Broken Fixture / Door": "ভাঙা ফিক্সচার / দরজা", "Equipment Issue": "সরঞ্জামের সমস্যা", "Spill / Mess Needs Cleanup": "পরিষ্কার প্রয়োজন", "Restroom Needs Attention": "টয়লেটে মনোযোগ প্রয়োজন", "Trash / Bins Full": "ময়লার ঝুড়ি ভর্তি", "No Soap": "সাবান নেই", "No Paper Towels": "কাগজের তোয়ালে নেই", "No Toilet Paper": "টয়লেট পেপার নেই", "No Hand Sanitizer": "স্যানিটাইজার নেই", "Breakroom Restock": "ব্রেকরুম রিস্টক", "Report a Facility Issue": "সমস্যা রিপোর্ট করুন", "Select the issue(s). Takes 10 seconds.": "সমস্যা নির্বাচন করুন। ১০ সেকেন্ড লাগে।", "Select one or more issues, then tap Send": "নির্বাচন করে পাঠান চাপুন", "Other / Custom Issue": "অন্যান্য সমস্যা", "Describe any other issue here...": "সমস্যাটি এখানে লিখুন...", "Add a Photo (optional)": "ছবি যোগ করুন (ঐচ্ছিক)", "Take Photo": "ছবি তুলুন", "From Library": "গ্যালারি থেকে", "Send Report →": "রিপোর্ট পাঠান →", "Sending...": "পাঠানো হচ্ছে...", "Report Sent!": "রিপোর্ট পাঠানো হয়েছে!", "The team has been notified and is on the way.": "টিমকে জানানো হয়েছে, তারা আসছে।", "Report Another Issue": "আরেকটি সমস্যা রিপোর্ট করুন", "Speak": "বলুন", "Listening...": "শোনা হচ্ছে...", "Low": "কম", "Medium": "মাঝারি", "High": "উচ্চ", "AI Suggestion — review & confirm": "এআই পরামর্শ — যাচাই করুন", "Suggested severity": "প্রস্তাবিত মাত্রা", "Description (editable)": "বিবরণ (সম্পাদনাযোগ্য)", "Active Issues": "সক্রিয় সমস্যা", "Resolved": "সমাধান হয়েছে", "Fixed It": "সমাধান হয়েছে", "No active issues": "কোনো সক্রিয় সমস্যা নেই", "Dashboard": "ড্যাশবোর্ড", "Manage": "পরিচালনা", "Account": "অ্যাকাউন্ট", "Refresh": "রিফ্রেশ", "Log Out": "লগ আউট", "Language": "ভাষা", "SupplyPing Dashboard": "SupplyPing ড্যাশবোর্ড", "Facility Operations": "সুবিধা পরিচালনা", "All Clear — No Active Issues": "সব ঠিক আছে — কোনো সক্রিয় সমস্যা নেই", "No action needed right now.": "এখন কোনো পদক্ষেপের প্রয়োজন নেই।", "{n} Active Issue Needs Attention": "{n}টি সক্রিয় সমস্যা মনোযোগ চায়", "{n} Active Issues Need Attention": "{n}টি সক্রিয় সমস্যা মনোযোগ চায়", "Your team has been notified. Tap Fixed It when resolved.": "আপনার টিমকে জানানো হয়েছে। সমাধান হলে সমাধান হয়েছে চাপুন।", "Open Issues": "খোলা সমস্যা", "Total Reports": "মোট রিপোর্ট", "Auto-Refresh": "স্বয়ংক্রিয় রিফ্রেশ", "Live": "লাইভ", "Alert sent to": "সতর্কতা পাঠানো হয়েছে", "Founding Pilot Feedback": "পাইলট প্রতিক্রিয়া", "Your pilot is free for 30 days. All we ask is your honest feedback.": "আপনার পাইলট ৩০ দিন বিনামূল্যে। আমরা শুধু আপনার সৎ মতামত চাই।", "Tell us anything — features, bugs, ideas, complaints...": "আমাদের যেকোনো কিছু বলুন — ফিচার, ত্রুটি, ধারণা, অভিযোগ...", "Send Feedback": "মতামত পাঠান", "Thank you! Your feedback was sent.": "ধন্যবাদ! আপনার মতামত পাঠানো হয়েছে।", "days left in your free pilot": "দিন বাকি আপনার ফ্রি পাইলটে", "Last day of your free pilot": "আপনার ফ্রি পাইলটের শেষ দিন", "Pilot ended — contact us to continue": "পাইলট শেষ — চালিয়ে যেতে যোগাযোগ করুন", "Photograph the hazard only — avoid people, screens, and personal information.": "শুধু ঝুঁকির ছবি তুলুন — মানুষ, স্ক্রিন ও ব্যক্তিগত তথ্য এড়িয়ে চলুন।" },
+  hi: { "Safety & Hazards": "सुरक्षा और खतरे", "Security & Facilities": "सिक्योरिटी और सुविधाएँ", "Maintenance & Repairs": "रखरखाव और मरम्मत", "Cleaning & Sanitation": "सफ़ाई और स्वच्छता", "Supplies": "सामग्री", "Wet Floor / Spill": "गीला फ़र्श / रिसाव", "Blocked Exit / Aisle": "अवरुद्ध निकास / गलियारा", "Trip / Fall Hazard": "ठोकर / गिरने का खतरा", "Near-Miss / Incident": "निकट-चूक / घटना", "PPE / Equipment Unsafe": "पीपीई / असुरक्षित उपकरण", "Access / Door Issue": "प्रवेश / दरवाज़े की समस्या", "Property Damage": "संपत्ति क्षति", "Suspicious Activity": "संदिग्ध गतिविधि", "Lighting Out / Flickering": "लाइट बंद / टिमटिमाती", "HVAC / Temperature Issue": "एसी / तापमान समस्या", "Broken Fixture / Door": "टूटा उपकरण / दरवाज़ा", "Equipment Issue": "उपकरण समस्या", "Spill / Mess Needs Cleanup": "सफ़ाई की ज़रूरत", "Restroom Needs Attention": "शौचालय पर ध्यान दें", "Trash / Bins Full": "कूड़ेदान भरे हैं", "No Soap": "साबुन नहीं है", "No Paper Towels": "पेपर टॉवल नहीं है", "No Toilet Paper": "टॉयलेट पेपर नहीं है", "No Hand Sanitizer": "सैनिटाइज़र नहीं है", "Breakroom Restock": "ब्रेकरूम रीस्टॉक", "Report a Facility Issue": "समस्या रिपोर्ट करें", "Select the issue(s). Takes 10 seconds.": "समस्या चुनें। 10 सेकंड लगते हैं।", "Select one or more issues, then tap Send": "चुनें और भेजें दबाएँ", "Other / Custom Issue": "अन्य समस्या", "Describe any other issue here...": "समस्या यहाँ लिखें...", "Add a Photo (optional)": "फ़ोटो जोड़ें (वैकल्पिक)", "Take Photo": "फ़ोटो लें", "From Library": "गैलरी से", "Send Report →": "रिपोर्ट भेजें →", "Sending...": "भेजा जा रहा है...", "Report Sent!": "रिपोर्ट भेज दी गई!", "The team has been notified and is on the way.": "टीम को सूचित कर दिया गया है।", "Report Another Issue": "एक और समस्या रिपोर्ट करें", "Speak": "बोलें", "Listening...": "सुन रहा है...", "Low": "कम", "Medium": "मध्यम", "High": "उच्च", "AI Suggestion — review & confirm": "एआई सुझाव — जाँचें और पुष्टि करें", "Suggested severity": "सुझाई गई गंभीरता", "Description (editable)": "विवरण (संपादन योग्य)", "Active Issues": "सक्रिय समस्याएँ", "Resolved": "हल हो गया", "Fixed It": "ठीक हो गया", "No active issues": "कोई सक्रिय समस्या नहीं", "Dashboard": "डैशबोर्ड", "Manage": "प्रबंधित करें", "Account": "खाता", "Refresh": "रिफ्रेश", "Log Out": "लॉग आउट", "Language": "भाषा", "SupplyPing Dashboard": "SupplyPing डैशबोर्ड", "Facility Operations": "सुविधा संचालन", "All Clear — No Active Issues": "सब ठीक है — कोई सक्रिय समस्या नहीं", "No action needed right now.": "अभी कोई कार्रवाई आवश्यक नहीं।", "{n} Active Issue Needs Attention": "{n} सक्रिय समस्या पर ध्यान दें", "{n} Active Issues Need Attention": "{n} सक्रिय समस्याओं पर ध्यान दें", "Your team has been notified. Tap Fixed It when resolved.": "आपकी टीम को सूचित कर दिया गया है। हल होने पर ठीक हो गया दबाएँ।", "Open Issues": "खुली समस्याएँ", "Total Reports": "कुल रिपोर्ट", "Auto-Refresh": "स्वतः रिफ्रेश", "Live": "लाइव", "Alert sent to": "अलर्ट भेजा गया", "Founding Pilot Feedback": "पायलट फ़ीडबैक", "Your pilot is free for 30 days. All we ask is your honest feedback.": "आपका पायलट 30 दिन नि:शुल्क है। हम केवल आपकी ईमानदार प्रतिक्रिया चाहते हैं।", "Tell us anything — features, bugs, ideas, complaints...": "हमें कुछ भी बताएं — सुविधाएँ, बग, विचार, शिकायतें...", "Send Feedback": "फ़ीडबैक भेजें", "Thank you! Your feedback was sent.": "धन्यवाद! आपकी प्रतिक्रिया भेज दी गई।", "days left in your free pilot": "दिन शेष आपके नि:शुल्क पायलट में", "Last day of your free pilot": "आपके नि:शुल्क पायलट का अंतिम दिन", "Pilot ended — contact us to continue": "पायलट समाप्त — जारी रखने के लिए संपर्क करें", "Photograph the hazard only — avoid people, screens, and personal information.": "केवल खतरे की फ़ोटो लें — लोगों, स्क्रीन और व्यक्तिगत जानकारी से बचें।" },
+  zh: { "Safety & Hazards": "安全与隐患", "Security & Facilities": "安保与设施", "Maintenance & Repairs": "维护与维修", "Cleaning & Sanitation": "清洁与卫生", "Supplies": "物资", "Wet Floor / Spill": "地面湿滑 / 洒漏", "Blocked Exit / Aisle": "出口 / 通道堵塞", "Trip / Fall Hazard": "绊倒 / 跌倒风险", "Near-Miss / Incident": "险情 / 事故", "PPE / Equipment Unsafe": "防护装备不安全", "Access / Door Issue": "门禁 / 门的问题", "Property Damage": "财产损坏", "Suspicious Activity": "可疑活动", "Lighting Out / Flickering": "灯光故障 / 闪烁", "HVAC / Temperature Issue": "空调 / 温度问题", "Broken Fixture / Door": "设施 / 门损坏", "Equipment Issue": "设备问题", "Spill / Mess Needs Cleanup": "需要清理", "Restroom Needs Attention": "洗手间需要处理", "Trash / Bins Full": "垃圾桶已满", "No Soap": "没有肥皂", "No Paper Towels": "没有纸巾", "No Toilet Paper": "没有厕纸", "No Hand Sanitizer": "没有消毒液", "Breakroom Restock": "休息室补货", "Report a Facility Issue": "报告设施问题", "Select the issue(s). Takes 10 seconds.": "选择问题,只需10秒。", "Select one or more issues, then tap Send": "选择后点击发送", "Other / Custom Issue": "其他问题", "Describe any other issue here...": "在此描述问题...", "Add a Photo (optional)": "添加照片(可选)", "Take Photo": "拍照", "From Library": "从相册选择", "Send Report →": "发送报告 →", "Sending...": "发送中...", "Report Sent!": "报告已发送!", "The team has been notified and is on the way.": "团队已收到通知,正在处理。", "Report Another Issue": "报告另一个问题", "Speak": "说话", "Listening...": "正在听...", "Low": "低", "Medium": "中", "High": "高", "AI Suggestion — review & confirm": "AI 建议 — 请确认", "Suggested severity": "建议严重程度", "Description (editable)": "描述(可编辑)", "Active Issues": "待处理问题", "Resolved": "已解决", "Fixed It": "已修复", "No active issues": "暂无待处理问题", "Dashboard": "仪表板", "Manage": "管理", "Account": "账户", "Refresh": "刷新", "Log Out": "退出登录", "Language": "语言", "SupplyPing Dashboard": "SupplyPing 仪表板", "Facility Operations": "设施运营", "All Clear — No Active Issues": "一切正常 — 没有待处理问题", "No action needed right now.": "目前无需处理。", "{n} Active Issue Needs Attention": "{n} 个待处理问题需要关注", "{n} Active Issues Need Attention": "{n} 个待处理问题需要关注", "Your team has been notified. Tap Fixed It when resolved.": "已通知您的团队。解决后请点击已修复。", "Open Issues": "待处理问题", "Total Reports": "报告总数", "Auto-Refresh": "自动刷新", "Live": "实时", "Alert sent to": "警报已发送至", "Founding Pilot Feedback": "试用反馈", "Your pilot is free for 30 days. All we ask is your honest feedback.": "您的试点30天免费。我们只需要您的真实反馈。", "Tell us anything — features, bugs, ideas, complaints...": "告诉我们任何事 — 功能、错误、想法、投诉...", "Send Feedback": "发送反馈", "Thank you! Your feedback was sent.": "谢谢！您的反馈已发送。", "days left in your free pilot": "天免费试点剩余", "Last day of your free pilot": "免费试点的最后一天", "Pilot ended — contact us to continue": "试点已结束 — 请联系我们继续", "Photograph the hazard only — avoid people, screens, and personal information.": "只拍摄危险本身 — 避免拍到人员、屏幕和个人信息。" },
 };
 
 // ── DASHBOARD TRANSLATION LAYER ──────────────────────────────────
@@ -531,7 +462,7 @@ function evaluateAccess(profile, authCreatedAt) {
   if (authCreatedAt) {
     const signedUp = new Date(authCreatedAt);
     const elapsed = Math.floor((Date.now() - signedUp.getTime()) / (1000 * 60 * 60 * 24));
-    return { daysLeft: Math.max(0, 14 - elapsed), isPaid: false, blocked: false, status, source: "fallback_signup_date" };
+    return { daysLeft: Math.max(0, 30 - elapsed), isPaid: false, blocked: false, status, source: "fallback_signup_date" };
   }
 
   return { daysLeft: null, isPaid: false, blocked: false, status, source: "unknown" };
@@ -584,21 +515,6 @@ const shortUrl = (token) => `https://supplyping.com/r/${token}`;
 // Resolves a token to its client + location. Scans the Clients table because
 // tokens live inside each row's Locations JSON; fine at current scale, and
 // the natural thing to index once this moves to Postgres.
-const TOKEN_CACHE_PREFIX = "sp_token_";
-function readCachedToken(clean) {
-  try {
-    const raw = localStorage.getItem(TOKEN_CACHE_PREFIX + clean);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
-}
-function cacheToken(clean, hit) {
-  try { localStorage.setItem(TOKEN_CACHE_PREFIX + clean, JSON.stringify(hit)); } catch (e) {}
-}
-
-// Resolves a short code to its current config. Every successful lookup is
-// cached on the device, and a lookup that FAILS (no signal in a restroom or
-// supply room) falls back to that cache, so a code this phone has scanned
-// before still resolves offline instead of becoming "Unlisted Location".
 async function fetchByToken(token) {
   const clean = String(token || "").toLowerCase().trim();
   if (!clean) return null;
@@ -610,9 +526,7 @@ async function fetchByToken(token) {
     const data = await res.json();
     if (!res.ok || !data.records) {
       console.error("[ShortCode] Clients read failed:", res.status);
-      const cached = readCachedToken(clean);
-      if (cached) console.warn("[ShortCode] Using cached config for", clean);
-      return cached;
+      return null;
     }
     for (const rec of data.records) {
       const f = rec.fields || {};
@@ -622,7 +536,7 @@ async function fetchByToken(token) {
         const tokens = Array.isArray(room.tokens) ? room.tokens : [];
         const idx = tokens.findIndex((t) => String(t).toLowerCase() === clean);
         if (idx !== -1) {
-          const hit = {
+          return {
             facility: f["Facility Name"] || f["Business Name"] || "",
             business: f["Business Name"] || "",
             cleaningEmail: f["Cleaning Team Email"] || "",
@@ -630,8 +544,6 @@ async function fetchByToken(token) {
             category: room.category || "",
             unit: tokens.length > 1 ? String(idx + 1) : "",
           };
-          cacheToken(clean, hit);
-          return hit;
         }
       }
     }
@@ -639,9 +551,7 @@ async function fetchByToken(token) {
     return null;
   } catch (e) {
     console.error("[ShortCode] Lookup error:", e);
-    const cached = readCachedToken(clean);
-    if (cached) console.warn("[ShortCode] Offline — using cached config for", clean);
-    return cached;
+    return null;
   }
 }
 
@@ -989,14 +899,11 @@ async function fetchReports(scope) {
   } catch (e) { return []; }
 }
 
-// Returns { ok, netError }. netError distinguishes "no connectivity" (queue
-// the report and retry later) from "Airtable rejected the fields" (fall
-// through to the next, smaller payload).
 async function submitReportToAirtable(fields, attemptLabel = "report") {
   try {
     const r = await airtableWrite(`https://api.airtable.com/v0/${AIRTABLE_BASE}/Reports`, "POST", fields, `Report (${attemptLabel})`);
-    return { ok: !!r.ok, netError: false };
-  } catch (e) { console.error("[Airtable] Network error on report write:", e); return { ok: false, netError: true }; }
+    return r.ok;
+  } catch (e) { console.error("[Airtable] Network error on report write:", e); return false; }
 }
 
 async function resolveInAirtable(id) {
@@ -1373,7 +1280,6 @@ export default function App() {
   const [aiTags, setAiTags] = useState([]);
   const [notifiedInfo, setNotifiedInfo] = useState(null); // { recipients, teams, source }
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
-  const [qrBannerDismissed, setQrBannerDismissed] = useState(false);
   const [queuedCount, setQueuedCount] = useState(0);
   const [reportDays, setReportDays] = useState(30); // 0 = all time
   const [fallbackData, setFallbackData] = useState(null);
@@ -1402,8 +1308,6 @@ export default function App() {
   // input fail silently on some mobile browsers.
   const recogRef = useRef(null);
   const [reportDone, setReportDone] = useState(false);
-  const [reportQueued, setReportQueued] = useState(false); // true when saved offline, not yet sent
-  const [signupErrors, setSignupErrors] = useState({});
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [loadingReports, setLoadingReports] = useState(false);
@@ -1483,9 +1387,6 @@ export default function App() {
       path === "/reset" || path === "/terms" || path === "/privacy" || path.startsWith("/f/") || path.startsWith("/r/") ||
       hash.includes("type=recovery");
     if (isPublicFlow) return;
-    // Demo end cards link here with ?signup=1 — open the same signup flow as
-    // the homepage "Start Free Trial" buttons.
-    if (params.get("signup") === "1") { setScreen("signup"); window.scrollTo(0, 0); return; }
 
     supabase.auth.getSession().then(async ({ data }) => {
       const sessionEmail = data?.session?.user?.email;
@@ -1813,11 +1714,11 @@ export default function App() {
         const who = bizName || location || data.user.email;
         sendAccountNotice({
           toEmail: MANAGEMENT_EMAIL,
-          subject: left === 0 ? `Trial ended — ${who}` : `Trial ending in 3 days — ${who}`,
-          headline: left === 0 ? "A client's free trial has ended" : "A client's free trial ends in 3 days",
+          subject: left === 0 ? `Pilot ended — ${who}` : `Pilot ending in 3 days — ${who}`,
+          headline: left === 0 ? "A client's free pilot has ended" : "A client's free pilot ends in 3 days",
           body: left === 0
-            ? `${who} (${data.user.email}) has reached the end of their 14-day free trial. Reach out to discuss converting to a paid plan.`
-            : `${who} (${data.user.email}) has 3 days left on their 14-day free trial. Good time for a check-in call before it lapses.`,
+            ? `${who} (${data.user.email}) has reached the end of their 30 day pilot. Reach out to discuss converting to a paid plan.`
+            : `${who} (${data.user.email}) has 3 days left on their 30 day pilot. Good time for a check-in call before it lapses.`,
         });
       }
     }).catch(() => setTrialDaysLeft(null));
@@ -1934,14 +1835,6 @@ export default function App() {
       `}</style>
       {toast && <Toast msg={toast.msg} color={toast.color} />}
 
-      {!qrBannerDismissed && (
-        <div style={{ background: T.ink, color: T.white, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", fontSize: 13.5, fontFamily: font.body }}>
-          <span>Scanned a QR code at your facility?</span>
-          <button onClick={() => nav("report")} style={{ background: T.orange, color: T.white, border: "none", borderRadius: 8, padding: "8px 14px", fontFamily: font.body, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Report the issue here</button>
-          <button onClick={() => setQrBannerDismissed(true)} aria-label="Dismiss" style={{ background: "transparent", color: T.dim, border: "none", fontSize: 18, cursor: "pointer", padding: "0 4px", lineHeight: 1 }}>×</button>
-        </div>
-      )}
-
       <nav style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 38, height: 38, background: T.ink, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📋</div>
@@ -1952,26 +1845,26 @@ export default function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Btn label="Log In" onClick={() => nav("login")} variant="ghost" />
-          <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="primary" />
+          <Btn label="Start Free Pilot →" onClick={() => nav("signup")} variant="primary" />
         </div>
       </nav>
 
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "80px 24px 64px", textAlign: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 100, padding: "6px 20px", fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, background: T.green, borderRadius: "50%", animation: "pulse 2s infinite" }} />
-          Free 14-Day Pilot — Built for Operations & Facilities Teams
+          Free 30 Day Founding Pilot, Built for Operations and Facilities Teams
         </div>
         <h1 style={{ fontFamily: font.display, fontSize: 56, fontWeight: 700, margin: "0 0 24px", letterSpacing: -2.5, lineHeight: 1.05 }}>
           From noticed<br />to fixed. <span style={{ color: T.orange }}>In minutes.</span>
         </h1>
         <p style={{ fontSize: 18, color: T.muted, maxWidth: 580, margin: "0 auto 16px", lineHeight: 1.7 }}>
-          Every hour a hazard, breakdown, or stock-out goes unreported is downtime you're already paying for. SupplyPing closes the gap between the person who sees the problem and the team that fixes it — automatically routed, timestamped, and logged from report to resolution.
+          Every hour a hazard, breakdown, or stock-out goes unreported is downtime you're already paying for. SupplyPing closes the gap between the person who sees the problem and the team that fixes it. Every report is automatically routed, timestamped, and logged from report to resolution.
         </p>
         <p style={{ fontSize: 14, color: T.dim, maxWidth: 500, margin: "0 auto 36px", lineHeight: 1.6 }}>
-          Any worker can report in seconds — no app, no login, no training. Deploys across a facility in under an hour, with no IT project and no hardware to install.
+          Any worker can report in seconds. No app, no login, no training. Deploys across a facility in under an hour, with no IT project and no hardware to install.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
-          <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="primary" size="lg" />
+          <Btn label="Start Free Pilot →" onClick={() => nav("signup")} variant="primary" size="lg" />
           <Btn label="See How It Works →" onClick={() => nav("report")} variant="outline" size="lg" />
         </div>
         <div style={{ fontSize: 12, color: T.dim }}>✓ No credit card &nbsp; ✓ Setup in 10 min &nbsp; ✓ Cancel anytime</div>
@@ -1996,7 +1889,7 @@ export default function App() {
               { n: "01", emoji: "✍️", title: "Sign Up Free", desc: "Create your account and select your industry. No credit card needed." },
               { n: "02", emoji: "📍", title: "Add Locations", desc: "Enter your locations and how many units/assets each has." },
               { n: "03", emoji: "🖨️", title: "Print QR Codes", desc: "Download and print your unique codes. Post at each unit/asset." },
-              { n: "04", emoji: "🚀", title: "Go Live", desc: "Problems reach the responsible team in seconds — timestamped, photographed, and tracked to resolution." },
+              { n: "04", emoji: "🚀", title: "Go Live", desc: "Problems reach the responsible team in seconds, timestamped, photographed, and tracked to resolution." },
             ].map(s => (
               <Card key={s.n}>
                 <div style={{ fontSize: 11, color: T.orange, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>{s.n}</div>
@@ -2017,17 +1910,17 @@ export default function App() {
             <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12, fontWeight: 700 }}>How the loop closes</div>
             <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 14px", letterSpacing: -1.2 }}>The reporting gap, closed.</h2>
             <p style={{ fontSize: 15.5, color: T.muted, maxWidth: 660, margin: "0 auto 34px", lineHeight: 1.7 }}>
-              Most facility problems are seen long before they're reported — because reporting means finding
+              Most facility problems are seen long before they're reported, because reporting means finding
               a supervisor, a radio, or a form. SupplyPing removes that step entirely: a worker reports from
               exactly where they're standing, and the issue reaches the team that owns it in seconds.
             </p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16 }}>
             {[
-              ["⚡", "Automated alert routing", "Safety, maintenance, security, cleaning and supplies each route to the team that owns them — by email or SMS, with no dispatcher in the middle."],
+              ["⚡", "Automated alert routing", "Safety, maintenance, security, cleaning and supplies each route to the team that owns them by email or SMS, with no dispatcher in the middle."],
               ["⏱️", "Incident-to-resolution tracking", "Every issue is timestamped when reported and when corrected, so response time becomes a number you manage instead of a claim you defend."],
-              ["🤖", "AI triage and severity", "A spill in an active equipment lane is prioritised above an empty dispenser — automatically, and consistently at 3 AM as at 3 PM."],
-              ["📉", "Fewer operational blind spots", "Stock-outs, equipment faults, and blocked access surface immediately instead of at the end of a shift — or at the next audit."],
+              ["🤖", "AI triage and severity", "A spill in an active equipment lane is prioritised above an empty dispenser, automatically and consistently, at 3 AM as at 3 PM."],
+              ["📉", "Fewer operational blind spots", "Stock-outs, equipment faults, and blocked access surface immediately instead of at the end of a shift, or at the next audit."],
               ["📋", "Audit-ready records", "Photo, time, location, and resolution on every issue. Exportable for client reviews, insurers, and internal audits."],
               ["🚀", "No app, no login, no training", "Any worker, contractor, or temp reports in seconds from their own phone. Nothing to install, nothing to roll out."],
             ].map(([emoji, title, desc]) => (
@@ -2095,7 +1988,7 @@ export default function App() {
           <h2 style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700, margin: "0 0 8px", letterSpacing: -1.2 }}>Simple, honest pricing.</h2>
           <p style={{ color: T.muted, fontSize: 15, marginBottom: 16 }}>No credit card required.</p>
           <div style={{ background: T.greenLight, border: `1.5px solid ${T.greenBorder}`, borderRadius: 12, padding: "14px 20px", marginBottom: 36, fontSize: 14, color: T.green, fontWeight: 600, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>
-            🎉 Founding Pilot: every plan is <b>FREE for your first 14 days</b>. All we ask is your honest feedback.
+            🎉 Founding Facility Pilot: <b>FREE for 30 days</b> for our first 10 facilities. We set it all up for you. All we ask is your honest feedback.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             {[
@@ -2113,7 +2006,7 @@ export default function App() {
                   </div>
                 ))}
                 <div style={{ marginTop: 20 }}>
-                  <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant={p.highlight ? "orange" : "outline"} full />
+                  <Btn label="Start Free Pilot →" onClick={() => nav("signup")} variant={p.highlight ? "orange" : "outline"} full />
                 </div>
               </div>
             ))}
@@ -2157,7 +2050,7 @@ export default function App() {
             </div>
           </div>
           <p style={{ textAlign: "center", fontSize: 12, color: T.dim, marginTop: 18 }}>
-            We never sell or share mobile numbers. Full terms in the "SMS Alerts — Terms &amp; Consent" section below.
+            We never sell or share mobile numbers. Full terms in the "SMS Alerts: Terms &amp; Consent" section below.
           </p>
         </div>
       </div>
@@ -2168,11 +2061,11 @@ export default function App() {
           Ready to streamline<br />your facility operations?
         </h2>
         <p style={{ color: "#888", fontSize: 16, marginBottom: 36, maxWidth: 480, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
-          Free for 14 days. Set up in 10 minutes. No credit card required.
+          Free for 30 days. We set it up for you. No credit card required.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <Btn label="Start Free Trial →" onClick={() => nav("signup")} variant="orange" size="lg" />
-          <a href="mailto:hello@supplyping.com?subject=SupplyPing%20Inquiry" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
+          <Btn label="Start Free Pilot →" onClick={() => nav("signup")} variant="orange" size="lg" />
+          <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hello@supplyping.com&su=SupplyPing%20Inquiry" target="_blank" rel="noreferrer" style={{ display: "inline-block", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 10, padding: "16px 32px", fontFamily: font.body, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>
             Email Us →
           </a>
         </div>
@@ -2196,7 +2089,7 @@ export default function App() {
           ))}
         </div>
         <div id="sms-terms" style={{ maxWidth: 720, margin: "32px auto 0", paddingTop: 24, borderTop: "1px solid #1c1c1c", fontSize: 11, color: "#555", lineHeight: 1.7, textAlign: "left" }}>
-          <div style={{ fontWeight: 700, color: "#777", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>SMS Alerts — Terms &amp; Consent</div>
+          <div style={{ fontWeight: 700, color: "#777", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>SMS Alerts: Terms &amp; Consent</div>
           <p style={{ margin: "0 0 8px" }}>SupplyPing sends SMS text alerts to facility operators and cleaning teams who opt in during account setup. By providing a mobile number and checking the consent box, you agree to receive recurring facility-alert text messages from SupplyPing. Message frequency varies based on facility activity. Message and data rates may apply.</p>
           <p style={{ margin: "0 0 8px" }}>Reply <b>STOP</b> at any time to unsubscribe. Reply <b>HELP</b> for assistance, or contact us at <a href="mailto:hello@supplyping.com" style={{ color: "#888" }}>hello@supplyping.com</a> or <a href="tel:+13135913484" style={{ color: "#888" }}>313-591-3484</a>. Consent to receive SMS is not a condition of purchase.</p>
           <p style={{ margin: 0 }}>We do not sell or share mobile information with third parties for marketing. © 2026 SupplyPing. Serving facilities across the United States.</p>
@@ -2217,14 +2110,11 @@ export default function App() {
           <span style={{ color: T.muted, fontSize: 12 }}>← Back</span>
         </div>
         <h2 style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Create your account</h2>
-        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 14-day pilot. No credit card required.</p>
+        <p style={{ color: T.muted, fontSize: 13, marginBottom: 28 }}>Start your free 30 day pilot. No credit card required.</p>
         <Card>
           <Input label="Business Name" value={bizName} onChange={setBizName} placeholder="Your business name" />
-          {signupErrors.bizName && <div style={{ color: T.red, fontSize: 12, marginTop: -10, marginBottom: 14 }}>{signupErrors.bizName}</div>}
           <Input label="Work Email" value={email} onChange={setEmail} placeholder="you@yourbusiness.com" type="email" />
-          {signupErrors.email && <div style={{ color: T.red, fontSize: 12, marginTop: -10, marginBottom: 14 }}>{signupErrors.email}</div>}
-          <Input label="Password (min 8 characters)" value={password} onChange={setPassword} placeholder="Create a strong password" type="password" />
-          {signupErrors.password && <div style={{ color: T.red, fontSize: 12, marginTop: -10, marginBottom: 14 }}>{signupErrors.password}</div>}
+          <Input label="Password (min 6 characters)" value={password} onChange={setPassword} placeholder="Create a strong password" type="password" />
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10, fontWeight: 500 }}>Your Industry</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 280, overflowY: "auto" }}>
@@ -2238,13 +2128,8 @@ export default function App() {
           </div>
           {authError && <div style={{ background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: T.red, marginBottom: 14 }}>{authError}</div>}
           <Btn label={authLoading ? "Creating account..." : "Create Account & Continue →"} onClick={async () => {
-            const errs = {};
-            if (!String(bizName || "").trim()) errs.bizName = "Please enter your business name.";
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim())) errs.email = "Please enter a valid work email.";
-            if (String(password || "").length < 8) errs.password = "Password must be at least 8 characters.";
-            setSignupErrors(errs);
-            if (Object.keys(errs).length) { setAuthError(""); return; }
-            if (!industry) { setAuthError("Please select your industry."); return; }
+            if (!bizName || !email || !password || !industry) { setAuthError("Please fill in all fields and select an industry."); return; }
+            if (password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
             setAuthError(""); setAuthLoading(true);
             const { error } = await supabase.auth.signUp({ email, password, options: { data: { business_name: bizName, industry: INDUSTRIES.find(i => i.id === industry)?.label || industry } } });
             setAuthLoading(false);
@@ -2252,11 +2137,11 @@ export default function App() {
             try {
               await fetch("https://api.web3forms.com/submit", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ access_key: WEB3FORMS_KEY, subject: `🎉 New SupplyPing Signup — ${bizName}`, "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Plan": "Free Trial" })
+                body: JSON.stringify({ access_key: WEB3FORMS_KEY, subject: `🎉 New SupplyPing Signup — ${bizName}`, "Business Name": bizName, "Email": email, "Industry": INDUSTRIES.find(i => i.id === industry)?.label || industry, "Plan": "Free Pilot" })
               });
             } catch (e) {}
             setScreen("onboard"); setStep(1); window.scrollTo(0, 0);
-          }} disabled={authLoading} variant="primary" full />
+          }} disabled={!bizName || !email || !password || !industry || authLoading} variant="primary" full />
           <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: T.muted }}>
             Already have an account? <span onClick={() => nav("login")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>Log in</span>
           </div>
@@ -2326,7 +2211,7 @@ export default function App() {
             </span>
           </div>
           <div style={{ textAlign: "center", marginTop: 12, fontSize: 13, color: T.muted }}>
-            New to SupplyPing? <span onClick={() => nav("signup")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>Start free trial</span>
+            New to SupplyPing? <span onClick={() => nav("signup")} style={{ color: T.blue, cursor: "pointer", fontWeight: 500 }}>Start free pilot</span>
           </div>
         </Card>
       </div>
@@ -2614,12 +2499,12 @@ export default function App() {
               border: `1px solid ${trialDaysLeft === 0 ? T.redBorder : (!trialLooksExtended && trialDaysLeft <= 3) ? "#FDE68A" : T.greenBorder}`,
             }}>
             {trialDaysLeft === 0
-              ? `⏰ ${dt("Trial ended — contact us to continue")} →`
+              ? `⏰ ${dt("Pilot ended — contact us to continue")} →`
               : trialLooksExtended
               ? "✓ Active"
               : trialDaysLeft === 1
-              ? `⏰ ${dt("Last day of your free trial")} →`
-              : `🎉 ${trialDaysLeft} ${dt("days left in your free trial")} →`}
+              ? `⏰ ${dt("Last day of your free pilot")} →`
+              : `🎉 ${trialDaysLeft} ${dt("days left in your free pilot")} →`}
           </button>
         )}
         {isPaid && (
@@ -2727,8 +2612,8 @@ export default function App() {
             gated: a spill must still be reportable if a card expires. */}
         {trialExpired ? (
           <Card style={{ marginTop: 20, borderColor: T.redBorder, background: T.redLight }}>
-            <div style={{ fontSize: 11, color: T.red, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>⏰ Trial Expired</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Your 14-day trial has ended</div>
+            <div style={{ fontSize: 11, color: T.red, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>⏰ Pilot Expired</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Your 30 day pilot has ended</div>
             <p style={{ fontSize: 12.5, color: T.muted, margin: "0 0 14px", lineHeight: 1.55 }}>
               Your team can still scan and report, and alerts still reach your inbox — nothing safety-related was switched off.
               Upgrade to restore your live dashboard, performance reports, and QR code generation.
@@ -2752,7 +2637,7 @@ export default function App() {
         <Card style={{ marginTop: 28 }}>
           <div style={{ fontSize: 11, color: T.orange, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>💬 {dt("Founding Pilot Feedback")}</div>
           <p style={{ fontSize: 13, color: T.muted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            {dt("Your plan is free for 14 days — all we ask is your honest feedback.")}
+            {dt("Your pilot is free for 30 days. All we ask is your honest feedback.")}
           </p>
           {feedbackSent ? (
             <div style={{ background: T.greenLight, border: `1px solid ${T.greenBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: T.green, fontWeight: 500 }}>
@@ -3340,28 +3225,18 @@ export default function App() {
               // Progressive fallback: a report must never be lost to one bad
               // field. Try full → base → bare-minimum, logging each attempt so
               // the offending field is named in the console.
-              const minimalFields = {
-                "Location": locName,
-                "Room": roomName,
-                "Status": issueString,
-                "Cleaning Team Email": cleaningEmail,
-              };
-              // Dead-zone handling: if the device reports no connectivity, or
-              // every Airtable attempt died with a network error (phone thinks
-              // it is online but cannot reach anything), the WHOLE report is
-              // queued — record, email, and SMS — and replayed on reconnect.
-              const offlineNow = typeof navigator !== "undefined" && navigator.onLine === false;
-              let saved = false;
-              let airtableNetError = false;
-              if (!offlineNow) {
-                let r = await submitReportToAirtable(extendedFields, "full (with Severity/Details/Bathroom Status)");
-                if (!r.ok) r = await submitReportToAirtable(reportFields, "base (core fields + Photo)");
-                if (!r.ok) r = await submitReportToAirtable(minimalFields, "minimal (4 text fields only)");
-                saved = r.ok;
-                airtableNetError = !r.ok && r.netError;
+              let saved = await submitReportToAirtable(extendedFields, "full (with Severity/Details/Bathroom Status)");
+              if (!saved) saved = await submitReportToAirtable(reportFields, "base (core fields + Photo)");
+              if (!saved) {
+                const minimal = {
+                  "Location": locName,
+                  "Room": roomName,
+                  "Status": issueString,
+                  "Cleaning Team Email": cleaningEmail,
+                };
+                saved = await submitReportToAirtable(minimal, "minimal (4 text fields only)");
               }
-              const noSignal = offlineNow || airtableNetError;
-              if (!saved && !noSignal) showToast("⚠️ Alert sent, but the dashboard record failed to save — check console.", T.yellow);
+              if (!saved) showToast("⚠️ Alert sent, but the dashboard record failed to save — check console.", T.yellow);
 
               // 2) EmailJS alert (or offline queue).
               // cleaning_email maps to {{cleaning_email}} in template_58s7r9h;
@@ -3373,14 +3248,9 @@ export default function App() {
               // scanning a QR code has no session and no state to draw on.
               let activeTeams = teamEmails;
               const hasStateRouting = Object.values(teamEmails || {}).some(v => v && String(v).trim());
-              let routingUnresolved = false;
               if (!hasStateRouting) {
-                if (noSignal) {
-                  routingUnresolved = true; // looked up at flush time instead
-                } else {
-                  const looked = await fetchTeamRouting(cleaningEmail, locName);
-                  if (looked) activeTeams = looked;
-                }
+                const looked = await fetchTeamRouting(cleaningEmail, locName);
+                if (looked) activeTeams = looked;
               }
               const routed = routeRecipients(reportIssues, { ...activeTeams, clean: cleaningEmail }, cleaningEmail);
               const notifiedTeams = teamsForItems(reportIssues);
@@ -3393,18 +3263,12 @@ export default function App() {
               const activePhones = hasStateRouting ? teamPhones : ((activeTeams && activeTeams._phones) || {});
               const activePrimaryPhone = hasStateRouting ? alertPhone : ((activeTeams && activeTeams._primaryPhone) || "");
               let smsResult = null;
-              let smsRecipients = [];
-              const smsIssue = (reportIssues[0] || "issue").replace(/^.{0,2}\s*/, ""); // drop leading emoji for SMS
-              const smsMessage = `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`;
               if (activeSmsOn) {
-                smsRecipients = routeRecipients(reportIssues, { ...activePhones, clean: activePrimaryPhone }, activePrimaryPhone);
+                const smsRecipients = routeRecipients(reportIssues, { ...activePhones, clean: activePrimaryPhone }, activePrimaryPhone);
                 if (smsRecipients.length) {
-                  if (noSignal) {
-                    smsResult = { sent: false, queued: true, reason: "queued until back online" };
-                  } else {
-                    smsResult = await sendSmsAlert(smsRecipients, smsMessage);
-                    console.log("[SMS] result:", JSON.stringify(smsResult), "to:", smsRecipients.join(", "));
-                  }
+                  const smsIssue = (reportIssues[0] || "issue").replace(/^.{0,2}\s*/, ""); // drop leading emoji for SMS
+                  smsResult = await sendSmsAlert(smsRecipients, `SupplyPing: ${smsIssue} reported at ${locName || "your facility"}. Check your dashboard for details.`);
+                  console.log("[SMS] result:", JSON.stringify(smsResult), "to:", smsRecipients.join(", "));
                 } else {
                   console.warn("[SMS] Enabled but no phone numbers on file — nothing sent.");
                   smsResult = { sent: false, reason: "no numbers on file" };
@@ -3427,7 +3291,7 @@ export default function App() {
                 lookedFor: cleaningEmail,
                 sms: smsResult,
               });
-              const emailPayload = {
+              const result = await sendOrQueueAlert({
                 cleaning_email: recipients,
                 to_email: recipients,
                 email: recipients,
@@ -3446,24 +3310,10 @@ export default function App() {
                 stall: unitLabel,
                 business: biz,
                 time: new Date().toLocaleString(),
-              };
+              });
 
-              let result;
-              if (noSignal) {
-                queueFullReport({
-                  airtable: { extended: extendedFields, base: reportFields, minimal: minimalFields },
-                  email: emailPayload,
-                  sms: smsRecipients.length ? { recipients: smsRecipients, message: smsMessage } : null,
-                  routing: { unresolved: routingUnresolved, issues: reportIssues, cleaningEmail, locName, smsMessage },
-                });
-                result = { status: "offline" };
-              } else {
-                result = await sendOrQueueAlert(emailPayload);
-              }
-
-              setReportQueued(result.status === "offline");
               if (result.status === "sent") showToast("✅ Report sent! Team notified.", T.green);
-              else if (result.status === "offline") showToast("No signal. Report saved on this device and will send automatically when you are back online.", T.yellow);
+              else if (result.status === "offline") showToast("📡 No signal — report saved. It'll send automatically when you're back online.", T.yellow);
               else showToast(`❌ Alert rejected: ${result.error} — report was saved to Airtable.`, T.red);
               setSending(false);
               setReportDone(true);
@@ -3475,12 +3325,9 @@ export default function App() {
           </>
         ) : (
           <div style={{ textAlign: "center", padding: "48px 0" }}>
-            <div style={{ fontSize: 72, marginBottom: 16 }}>{reportQueued ? "📡" : "✅"}</div>
-            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: reportQueued ? T.yellow : T.green, margin: "0 0 10px" }}>{reportQueued ? "Report saved on this device" : tr(reportLang, "Report Sent!")}</h2>
-            {reportQueued && (
-              <p style={{ fontSize: 13.5, color: T.muted, maxWidth: 420, margin: "0 auto 16px", lineHeight: 1.6 }}>No signal right now. It will send automatically when you are back online.</p>
-            )}
-            {!reportQueued && notifiedInfo && notifiedInfo.recipients.length > 0 && (
+            <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
+            <h2 style={{ fontFamily: font.display, fontSize: 28, fontWeight: 700, color: T.green, margin: "0 0 10px" }}>{tr(reportLang, "Report Sent!")}</h2>
+            {notifiedInfo && notifiedInfo.recipients.length > 0 && (
               <div style={{ background: T.cream, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", margin: "0 auto 16px", maxWidth: 420, textAlign: "left" }}>
                 <div style={{ fontSize: 10, color: T.muted, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>Notified</div>
                 {notifiedInfo.recipients.map(r => (
@@ -3598,15 +3445,15 @@ export default function App() {
             {/* Status banner */}
             <Card style={{ marginBottom: 20, borderColor: isPaid ? T.greenBorder : trialExpired ? T.redBorder : "#FDE68A", background: isPaid ? T.greenLight : trialExpired ? T.redLight : T.yellowLight }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6, color: isPaid ? T.green : trialExpired ? T.red : T.yellow }}>
-                {isPaid ? "✓ Active Subscription" : trialExpired ? "⏰ Trial Expired" : "🎉 Free Trial"}
+                {isPaid ? "✓ Active Subscription" : trialExpired ? "⏰ Pilot Expired" : "🎉 Free Pilot"}
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4 }}>
                 {isPaid
                   ? `${plan || "Paid"} plan — thank you`
                   : trialExpired
-                  ? "Your 14-day trial has ended"
+                  ? "Your 30 day pilot has ended"
                   : trialDaysLeft === null
-                  ? "Checking your trial…"
+                  ? "Checking your pilot…"
                   : trialLooksExtended
                   ? "Active — extended access"
                   : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`}
@@ -3616,7 +3463,7 @@ export default function App() {
                   ? "Your subscription is active. Everything stays on, and your reports keep running as normal."
                   : trialExpired
                   ? "Your team can still report issues and alerts still go out — nothing safety-related is switched off. Upgrade to restore your dashboard, reports, and QR generation."
-                  : "Full access during your trial. Upgrade any time — nothing is lost when you do."}
+                  : "Full access during your pilot. Upgrade any time. Nothing is lost when you do."}
               </div>
             </Card>
 
@@ -3760,9 +3607,9 @@ export default function App() {
               <h3 style={{ color: T.ink }}>3. Accounts &amp; Acceptable Use</h3>
               <p>You are responsible for the accuracy of contact information you provide and for maintaining the confidentiality of your login credentials. You agree not to misuse the service, including submitting false reports.</p>
               <h3 style={{ color: T.ink }}>4. Pilot Program</h3>
-              <p>Founding pilot accounts receive the service free for 14 days. After the pilot, continued use is subject to the then-current published pricing. Either party may discontinue at any time.</p>
+              <p>Founding Pilot accounts are free for 30 days (first 10 facilities). After that: $49 a month, no contract, cancel anytime, with a 30 day money back guarantee. Founding members lock 50% off for the first year. Either party may discontinue at any time.</p>
               <h3 style={{ color: T.ink }}>5. Contact</h3>
-              <p>Questions: <a href="mailto:hello@supplyping.com" style={{ color: T.orange }}>hello@supplyping.com</a> · <a href="tel:+13135913484" style={{ color: T.orange }}>313-591-3484</a></p>
+              <p>Questions: <a href="mailto:hello@supplyping.com" style={{ color: T.orange }}>hello@supplyping.com</a> · <a href="tel:+18339175833" style={{ color: T.orange }}>833-917-5833</a></p>
             </>
           ) : (
             <>
@@ -3793,7 +3640,7 @@ export default function App() {
             <div style={{ fontSize: 34, marginBottom: 12 }}>📊</div>
             <h2 style={{ fontFamily: font.display, fontSize: 21, fontWeight: 700, margin: "0 0 8px" }}>Reports need an active plan</h2>
             <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: "0 0 18px" }}>
-              Your trial has ended. Your reporting data is safe and still being collected — upgrade to generate client-ready reports again.
+              Your pilot has ended. Your reporting data is safe and still being collected. Upgrade to generate client-ready reports again.
             </p>
             <Btn label="See plans →" onClick={() => { setAccountTab("billing"); nav("account"); }} variant="primary" full />
             <div style={{ marginTop: 10 }}>
