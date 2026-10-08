@@ -40,7 +40,7 @@ async function sendAlertEmail({ recipients, issue, location, room, business, ext
       room: room || "",
       stall: "",
       business: business || "",
-      time: new Date().toLocaleString(),
+      time: new Date().toLocaleString("en-US", { timeZone: "America/Detroit" }),
       details: extra || "",
     };
 
@@ -168,7 +168,7 @@ async function notifyFounder({ subject, heading, body }) {
       <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto;">
         <p style="font-size: 15px; font-weight: 700; margin: 0 0 4px;">${heading}</p>
         <p style="font-size: 14px; color: #444; white-space: pre-wrap; line-height: 1.6;">${body}</p>
-        <p style="font-size: 11px; color: #999; margin-top: 20px;">${new Date().toLocaleString()} · SupplyPing</p>
+        <p style="font-size: 11px; color: #999; margin-top: 20px;">${new Date().toLocaleString("en-US", { timeZone: "America/Detroit" })} · SupplyPing</p>
       </div>`;
 
     // Plain-text fallback alongside the HTML body — required by mailbox
@@ -176,7 +176,7 @@ async function notifyFounder({ subject, heading, body }) {
     // This is a founder-facing alert with no unsubscribe list to manage, so
     // List-Unsubscribe is somewhat atypical here versus a marketing send —
     // included anyway since it costs nothing and was explicitly asked for.
-    const text = `${heading}\n\n${body}\n\n${new Date().toLocaleString()} · SupplyPing`;
+    const text = `${heading}\n\n${body}\n\n${new Date().toLocaleString("en-US", { timeZone: "America/Detroit" })} · SupplyPing`;
 
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
