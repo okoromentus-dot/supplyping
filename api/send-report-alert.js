@@ -65,7 +65,7 @@ export default async function handler(req, res) {
   const business = clip(body.business, 200);
   const time = clip(body.time, 100) || new Date().toLocaleString("en-US", { timeZone: "America/Detroit" });
   const severity = clip(body.severity || (issue.match(/Severity:\s*([^—]+)/) || [])[1] || "", 50).trim();
-  const description = clip(body.description || (issue.match(/Details:\s*([^—]+)/) || [])[1] || "", 1500).trim();
+  const description = clip(body.description || body.details || (issue.match(/Details:\s*([^—]+)/) || [])[1] || "", 1500).trim();
   const photo = findPhoto(body);
 
   // Headline = the first segment of the issue line (before the detail parts).

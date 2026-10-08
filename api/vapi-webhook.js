@@ -19,18 +19,12 @@ const AIRTABLE_BASE = process.env.AIRTABLE_BASE_ID || "appOkUWfKR5sb2Br4";
 const AIRTABLE_TOKEN = process.env.AIRTABLE_API_KEY || process.env.AIRTABLE_TOKEN;
 const VAPI_SECRET = process.env.VAPI_WEBHOOK_SECRET || "";
 
-// Email config. EmailJS blocks non-browser calls by default — enable
-// "Allow EmailJS API for non-browser applications" in EmailJS > Account >
-// Security, or these sends return 403 and the caller is told a team was
-// notified when nobody was.
-const EMAILJS_SERVICE = process.env.EMAILJS_SERVICE || "service_np65zh6";
-const EMAILJS_TEMPLATE = process.env.EMAILJS_TEMPLATE || "template_58s7r9h";
-const EMAILJS_PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "sVz8ve1fsqueZatOT";
-const EMAILJS_PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY || "";
 const MANAGEMENT_EMAIL = "hello@supplyping.com";
 
-// Sends the alert using the same template the app uses, so a phone report
-// looks identical to a scanned one in the recipient's inbox.
+// Sends the alert through /api/send-report-alert (Resend, server side) with
+// the same fields a scanned report uses, so a phone report looks identical
+// to a scanned one in the recipient's inbox. Returns false on any failure so
+// the caller can fall back to SMS.
 async function sendAlertEmail({ recipients, issue, location, room, business, extra }) {
   const to = (recipients || []).filter(Boolean).join(", ");
   if (!to) {
@@ -38,28 +32,23 @@ async function sendAlertEmail({ recipients, issue, location, room, business, ext
     return false;
   }
   try {
-    const payload = {
-      service_id: EMAILJS_SERVICE,
-      template_id: EMAILJS_TEMPLATE,
-      user_id: EMAILJS_PUBLIC_KEY,
-      template_params: {
-        cleaning_email: to, to_email: to, email: to,
-        issue: `📞 ${issue}`.slice(0, 400),
-        location: location || "Phone report",
-        location_name: location || "",
-        room: room || "",
-        stall: "",
-        business: business || "",
-        time: new Date().toLocaleString(),
-        details: extra || "",
-      },
+    const params = {
+      cleaning_email: to, to_email: to, email: to,
+      issue: `📞 ${issue}`.slice(0, 400),
+      location: location || "Phone report",
+      location_name: location || "",
+      room: room || "",
+      stall: "",
+      business: business || "",
+      time: new Date().toLocaleString(),
+      details: extra || "",
     };
-    if (EMAILJS_PRIVATE_KEY) payload.accessToken = EMAILJS_PRIVATE_KEY;
 
-    const r = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    const base = process.env.PUBLIC_BASE_URL || "https://supplyping.com";
+    const r = await fetch(`${base}/api/send-report-alert`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(params),
     });
     if (!r.ok) {
       const t = await r.text().catch(() => "");
@@ -166,9 +155,7 @@ const DEMO_LINKS = {
   transit: "https://supplyping.com/demo-transit/",
 };
 
-// Emails the founder when a call needs human follow-up. Uses the same EmailJS
-// general template the app already uses, so there's no new service to
-// configure and nothing extra to keep alive.
+// Emails the founder when a call needs human follow-up, via Resend.
 async function notifyFounder({ subject, heading, body }) {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
