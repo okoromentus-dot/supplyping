@@ -6,6 +6,6 @@ export default function handler(req, res) {
   res.status(200).json({
     ok: true,
     build: "2026-07-26-schema-aligned",
-    aiConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    aiConfigured: Boolean(process.env.GEMINI_API_KEY),
   });
 }
