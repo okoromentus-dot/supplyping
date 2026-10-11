@@ -3523,7 +3523,7 @@ export default function App() {
                 )}
               </div>
             )}
-            <p style={{ color: T.muted, fontSize: 15 }}>{tr(reportLang, "The team has been notified and is on the way.")}</p>
+                        {!reportQueued && <p style={{ color: T.muted, fontSize: 15 }}>{tr(reportLang, "The team has been notified and is on the way.")}</p>}
             <div style={{ marginTop: 28, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
               <Btn label={tr(reportLang, "Report Another Issue")} onClick={() => { setReportIssues([]); setOtherText(""); setPhotoFile(null); setPhotoPreview(null); setAiSuggestion(null); setAiSeverity(""); setAiDescription(""); setAiTags([]); setAiImmediateRisk(false); setNotifiedInfo(null); setReportDone(false); }} variant="outline" />
               <Btn label="← supplyping.com" onClick={() => nav("landing")} variant="ghost" />
